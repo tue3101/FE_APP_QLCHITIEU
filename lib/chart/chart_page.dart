@@ -14,7 +14,7 @@ class ChartPage extends StatefulWidget {
 
   const ChartPage({
     //super.key đảm bảo key được truyền lên StatefulWidget
-    // giúp Flutter biết widget này là "cũ" hay "mới" khi so sánh UI.
+    // giúp Flutter biết widget này là “cũ” hay “mới” khi so sánh UI.
     super.key,
     //bắt buộc truyền các tham số này
     required this.token,
@@ -255,15 +255,18 @@ class ChartPageState extends State<ChartPage> {
       // --- PHÂN LOẠI VÀO CHI TIÊU HOẶC THU NHẬP ---
       if (isExpense) { //isExpense -> true -> chi tiêu
         variableExpenseTotal += amount;
-        expenseCategoryDetails.update(
+        expenseCategoryDetails.update(// cập nhật giá trị tương ứng với categoryName (key)
           categoryName,
-          (existing) => <String, dynamic>{
+          //nếu có  categoryName
+          (existing)
+          => <String, dynamic>{//trả về một Map
             'name': existing['name'],
             'amount': (existing['amount'] as num) + amount,
             'color': existing['color'],
             'icon': existing['icon'],
-            'count': (existing['count'] as int) + 1,
+            'count': (existing['count'] as int) + 1, //đếm số lần xuất hiện
           },
+          //ko có categoryName
           ifAbsent: () => <String, dynamic>{
             'name': categoryName,
             'amount': amount,
@@ -272,10 +275,11 @@ class ChartPageState extends State<ChartPage> {
             'count': 1 //gán = 1 vì lần đầu tiên thấy
           },
         );
-      } else { // It's income (assuming id_loai '1' or anything not '2')
+      } else { //ngược lại thì vào thu nhập
         incomeTotal += amount;
         incomeCategoryDetails.update(
           categoryName,
+          //nếu có CateN
           (existing) => <String, dynamic>{
             'name': existing['name'],
             'amount': (existing['amount'] as num) + amount,
@@ -283,6 +287,7 @@ class ChartPageState extends State<ChartPage> {
             'icon': existing['icon'],
             'count': (existing['count'] as int) + 1,
           },
+          //nếu ko có thì tạo mới
           ifAbsent: () => <String, dynamic>{
             'name': categoryName,
             'amount': amount,
@@ -294,31 +299,42 @@ class ChartPageState extends State<ChartPage> {
     }
     
     // --- XỬ LÝ DỮ LIỆU CHI TIÊU ---
+    //tổng tất cả chi tiêu
     final grandTotalExpense = monthlyExpense + variableExpenseTotal;
-    final expenseDetailsList = expenseCategoryDetails.values.toList();
-    if (monthlyExpense > 0) {
-      expenseDetailsList.insert(0, {
+    //danh sách chi tiết chi tiêu
+    final expenseDetailsList = expenseCategoryDetails.values.toList(); //.value -> lấy tất cả giá trị
+
+    //mục đích là chỉ khi có chi tiêu cố định mơi thêm mục chi tiêu cố định hàng tháng vào ds thong ke
+    //kiểm tra người dùng có phát sinh chi tiêu cố định ko
+    if (monthlyExpense > 0) { //chi tiêu hàng tháng lớn hơn 0
+      //chèn moot mục vào đầu danh sách
+      expenseDetailsList.insert(0, {//chèn vào vị trí đầu tiên
         'name': 'Chi tiêu cố định hàng tháng',
         'amount': monthlyExpense,
         'color': '808080',
         'icon': 'e584',
-        'count': months.length, 
+        'count': months.length, //Gán giá trị cho key 'count' bằng số lượng tháng trong danh sách months.
       });
     }
 
     // --- XỬ LÝ DỮ LIỆU THU NHẬP ---
-    final incomeDetailsList = incomeCategoryDetails.values.toList();
+    final incomeDetailsList = incomeCategoryDetails.values.toList(); //lấy tất cả giá trị trong map thu nhập
     
     // --- CẬP NHẬT STATE ---
+    //mounted là thuộc tính có sẵn trong state
+    //trả về true nếu widget còn sống và false nếu bị dispose
     if (mounted) {
       setState(() {
-        _totalExpense = grandTotalExpense;
+        _totalExpense = grandTotalExpense; //gán kết quả sau khi cộng
+        //ds chứa ptu kieru map -> .map() biến đổi từng ptu trong ds
         _categoryExpenseDetails = expenseDetailsList.map<Map<String, dynamic>>(
-          (e) => Map<String, dynamic>.from(e as Map)
+          (e) //mặc định là dynamic
+            => Map<String, dynamic>.from(e as Map)//tạo bảng sao //mỗi ptu 2 được ép kiểu map
         ).toList();
         _totalIncome = incomeTotal;
+        //ds chứa ptu kieru map -> .map() biến đổi từng ptu trong ds
         _categoryIncomeDetails = incomeDetailsList.map<Map<String, dynamic>>(
-          (e) => Map<String, dynamic>.from(e as Map)
+          (e) => Map<String, dynamic>.from(e as Map)//tạo bảng sao //mỗi ptu 2 được ép kiểu map
         ).toList();
       });
     }
@@ -326,8 +342,11 @@ class ChartPageState extends State<ChartPage> {
 
   @override
   Widget build(BuildContext context) {
+    //kiểm tra chi tiết danh mục chi tiêu ko rỗng hoặc tổng chi >0
     final bool hasExpenseData = _categoryExpenseDetails.isNotEmpty || _totalExpense > 0;
+    //kiểm tra chi tiết danh mục thu nhập ko rỗng hoặc tổng thu >0
     final bool hasIncomeData = _categoryIncomeDetails.isNotEmpty || _totalIncome > 0;
+  //Chỉ cần có dữ liệu chi tiêu hoặc thu nhập → coi như có dữ liệu để hiển thị
     final bool hasAnyData = hasExpenseData || hasIncomeData;
 
     return Scaffold(
@@ -353,8 +372,9 @@ class ChartPageState extends State<ChartPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (hasExpenseData)
-                                  _buildExpenseChartAndDetails(),
+                                if (hasExpenseData)//nếu có dữ liệu chi tiêu
+                                  _buildExpenseChartAndDetails(),//gọi hàm vẽ bd và hiển thị ds chi tiết danh mục
+                                //Nếu có cả thu nhập và chi tiêu, thì chèn thêm một đường kẻ phân cách
                                 if (hasExpenseData && hasIncomeData)
                                   const Divider(height: 48, thickness: 1, indent: 16, endIndent: 16),
                                 if (hasIncomeData)
@@ -377,6 +397,8 @@ class ChartPageState extends State<ChartPage> {
         onPressed: () => _selectDateRange(context),
         icon: const Icon(Icons.calendar_today),
         label: Text(
+          // chuyển hai biến _startDate và _endDate từ kiểu DateTime thành chuỗi định dạng ngày/tháng/năm
+          //sau đó ghép lại thành một chuỗi biểu thị khoảng thời gian.
           '${DateFormat('dd/MM/yyyy').format(_startDate)} - ${DateFormat('dd/MM/yyyy').format(_endDate)}',
         ),
         style: TextButton.styleFrom(
@@ -391,6 +413,7 @@ class ChartPageState extends State<ChartPage> {
     );
   }
 
+  //ko có dữ liệu nào từ thu và chi
   Widget _buildNoDataWidget() {
     return Center(
       child: Column(
@@ -427,10 +450,11 @@ class ChartPageState extends State<ChartPage> {
     );
   }
 
+  //biểu đồ chi tiêu
   Widget _buildExpensePieChart() {
-    // Sort details by amount descending for chart
+    // //tạo ds mới từ _categoryExpenseDetails
     final sortedForChart = List<Map<String, dynamic>>.from(_categoryExpenseDetails)
-      ..sort((a, b) => b['amount'].compareTo(a['amount']));
+      ..sort((a, b) => b['amount'].compareTo(a['amount'])); //dùng ..sort so sánh số tiền b với a rồi dùng compareTo sắp xếp giảm dần
 
     return Container(
       height: 250,
@@ -439,12 +463,16 @@ class ChartPageState extends State<ChartPage> {
         children: [
           PieChart(
             PieChartData(
-              sections: sortedForChart.map((detail) {
+              //.map() ánh xạ từng ptu thành một PieChartSectionDate hiển thị lên biểu đồ tròn
+              sections: sortedForChart.map((detail) {//danh sách các danh mục chi tiêu đã được sắp xếp giảm dần theo số tiền
+                //tính % của từng danh mục trên tổng chi tiêu
+                //ví dụ: chi tiêu hàng tháng = 2.000.000 , tổng chi = 2.200.000 => 2.000.000/2.200.200*100 = 90.9%
                 final double percentage = (_totalExpense > 0) ? (detail['amount'] / _totalExpense) * 100 : 0;
                 return PieChartSectionData(
-                  color: Color(int.parse('0xFF${(detail['color'] as String).replaceAll('#', '')}')),
-                  value: detail['amount'],
-                  title: '${percentage.toStringAsFixed(1)}%',
+                  color: utils.hexToColor(detail['color'] as String),
+                  value: detail['amount'], //Giá trị phần trăm thực tế trên biểu đồ tròn
+                  //toStringAsFixed(1): làm tròn phần trăm tới 1 chữ số sau dấu phẩy
+                  title: '${percentage.toStringAsFixed(1)}%', //Hiển thị chuỗi phần trăm làm nhãn của từng phần biểu đồ
                   radius: 80,
                   titleStyle: const TextStyle(
                     fontSize: 12,
@@ -462,6 +490,7 @@ class ChartPageState extends State<ChartPage> {
             children: [
               const Text('Tổng chi', style: TextStyle(color: Colors.grey, fontSize: 16)),
               Text(
+                // định dạng số tiền _totalExpense sang chuỗi có dấu phân cách hàng nghìn, rồi thêm ký hiệu tiền tệ "₫"
                 '${_formatter.format(_totalExpense)} ₫',
                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.redAccent),
               ),
@@ -472,16 +501,20 @@ class ChartPageState extends State<ChartPage> {
     );
   }
 
+  //tạo danh sách các danh mục chi tiêu được sắp xếp theo số tiền giảm dần
   Widget _buildExpenseCategoryList() {
-    // Sort details by amount descending for list
+    // tạo ds mới kiểu map từ _categoryExpenseDetails
      final sortedForList = List<Map<String, dynamic>>.from(_categoryExpenseDetails)
+     //dùng ..sort so sánh a với b và compareTo sắp xếp giảm dần
       ..sort((a, b) => b['amount'].compareTo(a['amount']));
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: sortedForList.map((detail) {
+        children: sortedForList.map((detail) {//danh sách các danh mục chi tiêu đã được sắp xếp giảm dần theo số tiền
+          //tính % của từng danh mục trên tổng chi tiêu
+          //ví dụ: chi = 2.000.000 , tổng chi = 2.200.000 => 2.000.000/2.200.200*100 = 90.9%
           final double percentage = (_totalExpense > 0) ? (detail['amount'] / _totalExpense) * 100 : 0;
           return Card(
             elevation: 2,
@@ -494,7 +527,7 @@ class ChartPageState extends State<ChartPage> {
                   Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor: Color(int.parse('0xFF${(detail['color'] as String).replaceAll('#', '')}')),
+                        backgroundColor: utils.hexToColor(detail['color'] as String),
                         child: Icon(
                           utils.getFaIconDataFromUnicode(detail['icon'] as String),
                           color: Colors.white,
@@ -510,31 +543,33 @@ class ChartPageState extends State<ChartPage> {
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             ),
                             Text(
-                              '${detail['count']} giao dịch',
+                              '${detail['count']} giao dịch', //số lượng giao dịch của danh mục đó
                               style: const TextStyle(color: Colors.grey, fontSize: 12),
                             ),
                           ],
                         ),
                       ),
                       Text(
+                        // Dùng để hiển thị số tiền chi tiêu của từng danh mục dưới dạng có định dạng dấu phẩy phân cách hàng nghìn
+                        // kèm đơn vị tiền tệ ₫
                         '${_formatter.format(detail['amount'])} ₫',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  Row(//thanh tiến trình của danh mục thể hiện % chi tiêu của từng danh mục
                     children: [
                        Expanded(
                         child: LinearProgressIndicator(
                           value: percentage / 100,
                           backgroundColor: Colors.grey[200],
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(int.parse('0xFF${(detail['color'] as String).replaceAll('#', '')}')),
-                          ),
+                            utils.hexToColor(detail['color'] as String),                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
+                      //Chuyển số percentage thành chuỗi, làm tròn 1 chữ số thập phân.
                       Text('${percentage.toStringAsFixed(1)}%'),
                     ],
                   )
@@ -575,12 +610,16 @@ class ChartPageState extends State<ChartPage> {
         children: [
           PieChart(
             PieChartData(
+              //duyệt từng phần tử trong danh sách sortedForChart
+              // mỗi phần tử là một Map<String, dynamic> đại diện cho một danh mục thu nhập,
+              //chuyển nó thành một phần tử của biểu đồ tròn (PieChartSectionData).
               sections: sortedForChart.map((detail) {
                 final double percentage = (_totalIncome > 0) ? (detail['amount'] / _totalIncome) * 100 : 0;
                 return PieChartSectionData(
-                  color: Color(int.parse('0xFF${(detail['color'] as String).replaceAll('#', '')}')),
+                  color: utils.hexToColor(detail['color'] as String),
                   value: detail['amount'],
-                  title: '${percentage.toStringAsFixed(1)}%',
+                  //Chuyển số percentage thành chuỗi, làm tròn 1 chữ số thập phân.
+                  title: '${percentage.toStringAsFixed(1)}%', //dùng ${}% để chèn % vào tỷ lệ tính được
                   radius: 80,
                   titleStyle: const TextStyle(
                     fontSize: 12,
@@ -598,6 +637,8 @@ class ChartPageState extends State<ChartPage> {
             children: [
               const Text('Tổng thu', style: TextStyle(color: Colors.grey, fontSize: 16)),
               Text(
+                //Dùng để hiển thị tổng thu nhập (_totalIncome) dưới dạng chuỗi có dấu phân cách hàng nghìn
+                // kèm theo đơn vị tiền tệ ₫
                 '${_formatter.format(_totalIncome)} ₫',
                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green),
               ),
@@ -608,15 +649,18 @@ class ChartPageState extends State<ChartPage> {
     );
   }
 
+
+  //-----Hiển thị phần danh mục thu nhập -----//
   Widget _buildIncomeCategoryList() {
+    //tạo mới một danh sách kiểu map từ _categoryIncomeDetails
      final sortedForList = List<Map<String, dynamic>>.from(_categoryIncomeDetails)
-      ..sort((a, b) => b['amount'].compareTo(a['amount']));
+      ..sort((a, b) => b['amount'].compareTo(a['amount'])); //dùng sort để so sánh a, b rồi dùng compareTo để sắp xếp giảm dần
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: sortedForList.map((detail) {
+        children: sortedForList.map((detail) {//danh sách các danh mục thu nhập đã được sắp xếp giảm dần theo số tiền
           final double percentage = (_totalIncome > 0) ? (detail['amount'] / _totalIncome) * 100 : 0;
           return Card(
             elevation: 2,
@@ -629,7 +673,7 @@ class ChartPageState extends State<ChartPage> {
                   Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor: Color(int.parse('0xFF${(detail['color'] as String).replaceAll('#', '')}')),
+                        backgroundColor: utils.hexToColor(detail['color'] as String),
                         child: Icon(
                           utils.getFaIconDataFromUnicode(detail['icon'] as String),
                           color: Colors.white,
@@ -645,13 +689,15 @@ class ChartPageState extends State<ChartPage> {
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             ),
                             Text(
-                              '${detail['count']} giao dịch',
+                              '${detail['count']} giao dịch',//đếm số lượng giao dịch theo tên danh mục
                               style: const TextStyle(color: Colors.grey, fontSize: 12),
                             ),
                           ],
                         ),
                       ),
                       Text(
+                        //Dùng để hiển thị tổng thu nhập (_totalIncome) dưới dạng chuỗi có dấu phân cách hàng nghìn
+                        // kèm theo đơn vị tiền tệ ₫
                         '${_formatter.format(detail['amount'])} ₫',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
                       ),
@@ -665,11 +711,11 @@ class ChartPageState extends State<ChartPage> {
                           value: percentage / 100,
                           backgroundColor: Colors.grey[200],
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(int.parse('0xFF${(detail['color'] as String).replaceAll('#', '')}')),
-                          ),
+                            utils.hexToColor(detail['color'] as String),                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
+                      //Chuyển số percentage thành chuỗi, làm tròn 1 chữ số thập phân.
                       Text('${percentage.toStringAsFixed(1)}%'),
                     ],
                   )
@@ -683,7 +729,7 @@ class ChartPageState extends State<ChartPage> {
   }
 
   // --- Helper methods copied from HomePage ---
-
+//danh mục kết hợp
   void _combineCategories() {
     List<dynamic> combined = [];
     combined.addAll(_defaultCategories);
@@ -699,7 +745,9 @@ class ChartPageState extends State<ChartPage> {
         orElse: () => {'ma_mau': '9E9E9E'}, // Default Grey color
       );
       return {
+        //Dùng toán tử spread (...category) để giữ lại toàn bộ dữ liệu gốc
         ...category,
+        //thêm 2 trường mới
         'ma_icon': iconData['ma_icon'], // Chỉ sử dụng ma_icon
         'ma_mau': colorData['ma_mau'],
       };
@@ -709,8 +757,9 @@ class ChartPageState extends State<ChartPage> {
   Future<void> _fetchDefaultCategories() async {
     final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/default-categories');
     final response = await http.get(url, headers: _authHeaders());
-    if (await _handleApiResponse(response)) {
+    if (await _handleApiResponse(response)) { //kiểm tra phản hồi api
       final data = jsonDecode(response.body);
+      //nếu data là list -> true
       _defaultCategories = data is List ? data : [];
     } else {
       print('Lỗi tải danh mục mặc định: ${response.statusCode}');
@@ -723,6 +772,7 @@ class ChartPageState extends State<ChartPage> {
     final response = await http.get(url, headers: _authHeaders());
     if (await _handleApiResponse(response)) {
       final data = jsonDecode(response.body);
+      //nếu data là list -> true
       _userCategories = data is List ? data : [];
     } else {
       print('Lỗi tải danh mục người dùng: ${response.statusCode}');
@@ -735,6 +785,7 @@ class ChartPageState extends State<ChartPage> {
     final response = await http.get(url, headers: _authHeaders());
     if (await _handleApiResponse(response)) {
       final data = jsonDecode(response.body);
+      //nếu data là list -> true
       _colors = data is List ? data : [];
     } else {
        print('Lỗi tải màu: ${response.statusCode}');
@@ -747,7 +798,8 @@ class ChartPageState extends State<ChartPage> {
     final response = await http.get(url, headers: _authHeaders());
     if (await _handleApiResponse(response)) {
        final data = jsonDecode(response.body);
-      _icons = data is List ? data : [];
+       //nếu data là list -> true
+       _icons = data is List ? data : [];
     } else {
       print('Lỗi tải icon: ${response.statusCode}');
       _icons = [];
@@ -759,6 +811,7 @@ class ChartPageState extends State<ChartPage> {
     final response = await http.get(url, headers: _authHeaders());
     if (await _handleApiResponse(response)) {
       final data = jsonDecode(response.body);
+      //nếu data là list -> true
       if (data is List) return data;
       if (data is Map && data['data'] is List) return data['data'];
     }
@@ -785,12 +838,14 @@ class ChartPageState extends State<ChartPage> {
   }
 
   Future<bool> _handleApiResponse(http.Response response) async {
+    //chưa login hoặc ko có quyền truy cập
     if (response.statusCode == 401 || response.statusCode == 403) {
       if (mounted) {
+        //chuyển về logout
         auth_utils.logoutUser(context, widget.token, widget.idnguoidung);
       }
       return false;
-    }
+    }//thành công
     return response.statusCode == 200;
   }
 

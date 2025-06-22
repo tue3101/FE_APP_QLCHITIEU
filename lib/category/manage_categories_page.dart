@@ -71,11 +71,13 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
 
       if (_tabController.length != _transactionTypes.length) {
         _tabController.dispose();
+        //vsync Đồng bộ animation với khung hình thiết bị
+        //this tham chiếu tới state hiện tại
         _tabController = TabController(length: _transactionTypes.length, vsync: this);
       }
 
       if (_tabControllerChiTieu == null || _tabControllerChiTieu.length != 2) {
-        _tabControllerChiTieu?.dispose();
+        _tabControllerChiTieu?.dispose(); //khác null thì gọi dispose ko thì bỏ qua
         _tabControllerChiTieu = TabController(length: 2, vsync: this);
       }
 
@@ -91,6 +93,8 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
     }
   }
 
+  //Kết hợp danh mục mặc định và danh mục người dùng, sau đó ghép thêm thông tin màu sắc
+  // biểu tượng tương ứng, cuối cùng lưu vào _allCategories.
   void _combineAndGroupCategories() {
     List<dynamic> combined = [];
     combined.addAll(_defaultCategories);
@@ -120,6 +124,8 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
       };
     }).toList();
 
+    //Nhóm các danh mục (_allCategories) theo loại giao dịch (_transactionTypes)
+    // lưu vào map _groupedCategoriesByTransactionType.
     _groupedCategoriesByTransactionType = {};
     for (var type in _transactionTypes) {
       final int typeId = int.tryParse(type['id_loai']?.toString() ?? '') ?? 0;
@@ -129,27 +135,20 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
           .toList();
     }
 
-    print('User categories: $_userCategories');
-    print('Default categories: $_defaultCategories');
 
     // Sau khi map
-    _defaultCategories = _allCategories.where((cat) => cat['id_nguoidung'] == null).toList();
-    _userCategories = _allCategories.where((cat) => cat['id_nguoidung'] != null).toList();
+    // _defaultCategories = _allCategories.where((cat) => cat['id_nguoidung'] == null).toList();
+    // _userCategories = _allCategories.where((cat) => cat['id_nguoidung'] != null).toList();
 
-    final chiTieuUser = _userCategories.where((cat) => cat['id_loai'] == 2).toList();
-    final chiTieuDefault = _defaultCategories.where((cat) => cat['id_loai'] == 2).toList();
-    print('User chi tiêu: $chiTieuUser');
-    print('Default chi tiêu: $chiTieuDefault');
-
-    print('userPhatSinh: $chiTieuUser');
-    print('defaultPhatSinh: $chiTieuDefault');
-
-    print('_userCategories: $_userCategories');
-    print('_defaultCategories: $_defaultCategories');
-    final userPhatSinh = _userCategories.where((cat) => cat['id_loai'].toString() == '2' && cat['id_tennhom'].toString() == '2').toList();
-    final defaultPhatSinh = _defaultCategories.where((cat) => cat['id_loai'].toString() == '2' && cat['id_tennhom'].toString() == '2').toList();
-    print('userPhatSinh: $userPhatSinh');
-    print('defaultPhatSinh: $defaultPhatSinh');
+    // final chiTieuUser = _userCategories.where((cat) => cat['id_loai'] == 2).toList();
+    // final chiTieuDefault = _defaultCategories.where((cat) => cat['id_loai'] == 2).toList();
+    //
+    // print('_userCategories: $_userCategories');
+    // print('_defaultCategories: $_defaultCategories');
+    // final userPhatSinh = _userCategories.where((cat) => cat['id_loai'].toString() == '2' && cat['id_tennhom'].toString() == '2').toList();
+    // final defaultPhatSinh = _defaultCategories.where((cat) => cat['id_loai'].toString() == '2' && cat['id_tennhom'].toString() == '2').toList();
+    // print('userPhatSinh: $userPhatSinh');
+    // print('defaultPhatSinh: $defaultPhatSinh');
 
     setState(() {
       _defaultCategories = _allCategories.where((cat) => cat['id_nguoidung'] == null).toList();
@@ -158,6 +157,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
     });
   }
 
+  //gọi API lấy dữ liệu loại giao dịch
   Future<void> _fetchTransactionTypes() async {
     final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transaction-types');
     final response = await http.get(
@@ -177,6 +177,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
     }
   }
 
+  //lấy danh mục mặc định
   Future<void> _fetchDefaultCategories() async {
     final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/default-categories');
     try {
@@ -192,21 +193,21 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
             ...category,
             'id_danhmuc': int.tryParse(category['id_danhmuc']?.toString() ?? ''),
           }).toList();
-          List<dynamic> processedDefaultCategories = _defaultCategories.map((category) {
-            final icon = _icons.firstWhere(
-              (icon) => icon['id_icon'].toString() == category['id_icon'].toString(),
-              orElse: () => null,
-            );
-            final color = _colors.firstWhere(
-              (color) => color['id_mau'].toString() == category['id_mau'].toString(),
-              orElse: () => null,
-            );
-            return {
-              ...category,
-              'ma_icon': icon != null ? icon['ma_icon'] : 'f555',
-              'ma_mau': color != null ? color['ma_mau'] : '#2196F3',
-            };
-          }).toList();
+          // List<dynamic> processedDefaultCategories = _defaultCategories.map((category) {
+          //   final icon = _icons.firstWhere(
+          //     (icon) => icon['id_icon'].toString() == category['id_icon'].toString(),
+          //     orElse: () => null,
+          //   );
+          //   final color = _colors.firstWhere(
+          //     (color) => color['id_mau'].toString() == category['id_mau'].toString(),
+          //     orElse: () => null,
+          //   );
+          //   return {
+          //     ...category,
+          //     'ma_icon': icon != null ? icon['ma_icon'] : 'f555',
+          //     'ma_mau': color != null ? color['ma_mau'] : '#2196F3',
+          //   };
+          // }).toList();
         });
       } else {
         throw Exception('Failed to load default categories');
@@ -216,6 +217,8 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
     }
   }
 
+
+  //lấy  danh mục của người dùng
   Future<void> _fetchUserCategories() async {
     final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/categories/user/${widget.idnguodung}');
     try {
@@ -231,21 +234,21 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
             ...category,
             'id_danhmuc': int.tryParse(category['id_danhmuc']?.toString() ?? ''),
           }).toList();
-          List<dynamic> processedUserCategories = _userCategories.map((category) {
-            final icon = _icons.firstWhere(
-              (icon) => icon['id_icon'].toString() == category['id_icon'].toString(),
-              orElse: () => null,
-            );
-            final color = _colors.firstWhere(
-              (color) => color['id_mau'].toString() == category['id_mau'].toString(),
-              orElse: () => null,
-            );
-            return {
-              ...category,
-              'ma_icon': icon != null ? icon['ma_icon'] : 'f555',
-              'ma_mau': color != null ? color['ma_mau'] : '#2196F3',
-            };
-          }).toList();
+          // List<dynamic> processedUserCategories = _userCategories.map((category) {
+          //   final icon = _icons.firstWhere(
+          //     (icon) => icon['id_icon'].toString() == category['id_icon'].toString(),
+          //     orElse: () => null,
+          //   );
+          //   final color = _colors.firstWhere(
+          //     (color) => color['id_mau'].toString() == category['id_mau'].toString(),
+          //     orElse: () => null,
+          //   );
+          //   return {
+          //     ...category,
+          //     'ma_icon': icon != null ? icon['ma_icon'] : 'f555',
+          //     'ma_mau': color != null ? color['ma_mau'] : '#2196F3',
+          //   };
+          // }).toList();
         });
       } else {
         throw Exception('Failed to load user categories');
@@ -297,6 +300,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
     }
   }
 
+  //hàm lấy tất cả giao dịch để kiểm tra danh mục có giao dịch ko
   Future<bool> _checkIfCategoryHasTransactions(int categoryId) async {
     try {
       final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transactions/user/${widget.idnguodung}/all');
@@ -339,6 +343,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
       return;
     }
 
+    //sử dụng ? vì người dùng có thể nhấn nút back hoặc nhấn ra ngoài
     final bool? confirm = await showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -373,7 +378,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Xóa danh mục thành công!')),
           );
-          _loadData(); // Refresh data after delete
+          _loadData(); //load lại dữ liệu sau xóa
         } else {
           final errorData = jsonDecode(response.body);
           String errorMessage = 'Xóa danh mục thất bại.';
@@ -396,98 +401,98 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
     }
   }
 
-  Widget _buildCategoryListByNhom(int idNhom) {
-    final List<dynamic> allCategoriesForType = _allCategories
-        .where((cat) => cat['id_loai'] == 2 && cat['id_tennhom'] == idNhom)
-        .toList();
-
-    final List<dynamic> userCategoriesForType = allCategoriesForType
-        .where((cat) => cat['id_nguoidung'] != null)
-        .toList();
-
-    final List<dynamic> defaultCategoriesForType = allCategoriesForType
-        .where((cat) => cat['id_nguoidung'] == null)
-        .toList();
-
-    List<Widget> categoryWidgets = [];
-
-    // Thêm danh mục người dùng
-    if (userCategoriesForType.isNotEmpty) {
-      categoryWidgets.addAll(userCategoriesForType.map((category) {
-        final iconCode = category?['ma_icon'] ?? 'f555';
-        final colorCode = category?['ma_mau'] ?? '#2196F3';
-        return _CategoryItem(
-          categoryData: category,
-          icon: getFaIconDataFromUnicode(iconCode),
-          iconColor: hexToColor(colorCode),
-          title: category['ten_danh_muc'] ?? 'Không rõ',
-          onEdit: () async {
-            final result = await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => UpdateCategoryPage(
-                  token: widget.token,
-                  idnguodung: widget.idnguodung,
-                  categoryData: category,
-                ),
-              ),
-            );
-            if (result == true) {
-              _loadData();
-            }
-          },
-          onDelete: (categoryId) => _confirmDeleteCategory(categoryId),
-        );
-      }));
-    }
-
-    // Thêm tiêu đề danh mục mặc định nếu có
-    if (defaultCategoriesForType.isNotEmpty) {
-      categoryWidgets.add(
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 16.0),
-          child: Text(
-            'Danh mục mặc định',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              color: Colors.grey,
-            ),
-          ),
-        ),
-      );
-      // Thêm danh mục mặc định
-      categoryWidgets.addAll(defaultCategoriesForType.map((category) {
-        final iconCode = category?['ma_icon'] ?? 'f555';
-        final colorCode = category?['ma_mau'] ?? '#2196F3';
-        return _CategoryItem(
-          categoryData: category,
-          icon: getFaIconDataFromUnicode(iconCode),
-          iconColor: hexToColor(colorCode),
-          title: category['ten_danh_muc'] ?? 'Không rõ',
-          onEdit: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Không thể chỉnh sửa danh mục mặc định.')),
-            );
-          },
-          onDelete: (categoryId) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Không thể xóa danh mục mặc định.')),
-            );
-          },
-        );
-      }));
-    }
-
-    if (categoryWidgets.isEmpty) {
-      return const Center(child: Text('Chưa có danh mục nào'));
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16.0),
-      children: categoryWidgets,
-    );
-  }
+  // Widget _buildCategoryListByNhom(int idNhom) {
+  //   final List<dynamic> allCategoriesForType = _allCategories
+  //       .where((cat) => cat['id_loai'] == 2 && cat['id_tennhom'] == idNhom)
+  //       .toList();
+  //
+  //   final List<dynamic> userCategoriesForType = allCategoriesForType
+  //       .where((cat) => cat['id_nguoidung'] != null)
+  //       .toList();
+  //
+  //   final List<dynamic> defaultCategoriesForType = allCategoriesForType
+  //       .where((cat) => cat['id_nguoidung'] == null)
+  //       .toList();
+  //
+  //   List<Widget> categoryWidgets = [];
+  //
+  //   // Thêm danh mục người dùng
+  //   if (userCategoriesForType.isNotEmpty) {
+  //     categoryWidgets.addAll(userCategoriesForType.map((category) {
+  //       final iconCode = category?['ma_icon'] ?? 'f555';
+  //       final colorCode = category?['ma_mau'] ?? '#2196F3';
+  //       return _CategoryItem(
+  //         categoryData: category,
+  //         icon: getFaIconDataFromUnicode(iconCode),
+  //         iconColor: hexToColor(colorCode),
+  //         title: category['ten_danh_muc'] ?? 'Không rõ',
+  //         onEdit: () async {
+  //           final result = await Navigator.push(
+  //             context,
+  //             MaterialPageRoute(
+  //               builder: (context) => UpdateCategoryPage(
+  //                 token: widget.token,
+  //                 idnguodung: widget.idnguodung,
+  //                 categoryData: category,
+  //               ),
+  //             ),
+  //           );
+  //           if (result == true) {
+  //             _loadData();
+  //           }
+  //         },
+  //         onDelete: (categoryId) => _confirmDeleteCategory(categoryId),
+  //       );
+  //     }));
+  //   }
+  //
+  //   // Thêm tiêu đề danh mục mặc định nếu có
+  //   if (defaultCategoriesForType.isNotEmpty) {
+  //     categoryWidgets.add(
+  //       const Padding(
+  //         padding: EdgeInsets.symmetric(vertical: 16.0),
+  //         child: Text(
+  //           'Danh mục mặc định',
+  //           style: TextStyle(
+  //             fontWeight: FontWeight.bold,
+  //             fontSize: 18,
+  //             color: Colors.grey,
+  //           ),
+  //         ),
+  //       ),
+  //     );
+  //     // Thêm danh mục mặc định
+  //     categoryWidgets.addAll(defaultCategoriesForType.map((category) {
+  //       final iconCode = category?['ma_icon'] ?? 'f555';
+  //       final colorCode = category?['ma_mau'] ?? '#2196F3';
+  //       return _CategoryItem(
+  //         categoryData: category,
+  //         icon: getFaIconDataFromUnicode(iconCode),
+  //         iconColor: hexToColor(colorCode),
+  //         title: category['ten_danh_muc'] ?? 'Không rõ',
+  //         onEdit: () {
+  //           ScaffoldMessenger.of(context).showSnackBar(
+  //             const SnackBar(content: Text('Không thể chỉnh sửa danh mục mặc định.')),
+  //           );
+  //         },
+  //         onDelete: (categoryId) {
+  //           ScaffoldMessenger.of(context).showSnackBar(
+  //             const SnackBar(content: Text('Không thể xóa danh mục mặc định.')),
+  //           );
+  //         },
+  //       );
+  //     }));
+  //   }
+  //
+  //   if (categoryWidgets.isEmpty) {
+  //     return const Center(child: Text('Chưa có danh mục nào'));
+  //   }
+  //
+  //   return ListView(
+  //     padding: const EdgeInsets.all(16.0),
+  //     children: categoryWidgets,
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -547,6 +552,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
                                 ),
                               ),
                             );
+                            //thêm thành công thì load lại data
                             if (result == true) {
                               _loadData();
                             }
@@ -579,6 +585,8 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
 
     // Danh mục người dùng
     if (userThuNhap.isNotEmpty) {
+      //Duyệt từng phần tử category trong userThuNhap, chuyển mỗi phần tử thành 1 widget
+      // rồi thêm tất cả vào danh sách widgets.
       widgets.addAll(userThuNhap.map((category) {
         final iconCode = category['ma_icon'] ?? 'f555';
         final colorCode = category['ma_mau'] ?? '#2196F3';
@@ -598,6 +606,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
                 ),
               ),
             );
+            //cập nhật thành công thì load lại data
             if (result == true) {
               _loadData();
             }
@@ -689,8 +698,8 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
       (cat) => cat['id_loai'] == 2 && cat['id_tennhom'] == 2
     ).toList();
 
-    print('userPhatSinh: $userPhatSinh');
-    print('defaultPhatSinh: $defaultPhatSinh');
+    // print('userPhatSinh: $userPhatSinh');
+    // print('defaultPhatSinh: $defaultPhatSinh');
 
     List<Widget> widgets = [];
 
@@ -792,14 +801,14 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
         if (decodedBody is List) {
           chiTieuData = decodedBody;
         } else if (decodedBody is Map<String, dynamic>) {
-          chiTieuData = [decodedBody]; // Wrap the map in a list
+          chiTieuData = [decodedBody]; //gán trực tiếp vào
         } else {
-          chiTieuData = []; // Handle other cases gracefully
+          chiTieuData = [];
         }
 
         // tổng chi
         int tongSoTien = 0;
-        for (var item in chiTieuData) {
+        for (var item in chiTieuData) { //chi tiêu hàng tháng
           final soTien = item['amount'];
           if (soTien != null) {
             final parsedValue = double.tryParse(soTien.toString()) ?? 0.0; //ko chuyển đc -> 0.0
@@ -817,6 +826,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
               ),
               const SizedBox(height: 16),
               Text(
+                //$ chèn biên hoặc biểu thức vào chuỗi
                 '${tongSoTien} đ',
                 style: const TextStyle(fontSize: 32, color: Colors.blue, fontWeight: FontWeight.bold),
               ),
@@ -827,6 +837,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
                     builder: (context) => UpdateAmountDialog(),
                   );
                   if (newAmount != null) {
+                    //gọi hàm cập nhật số tiền hàng tháng sau khi người dùng đã nhập số mới trong dialog
                     await updateMonthlyAmount(context, newAmount);
                     setState(() {}); // reload lại dữ liệu
                   }
@@ -853,8 +864,8 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
       },
       body: jsonEncode({'amount': amount}),
     );
-    print('Status: ${response.statusCode}');
-    print('Body: ${response.body}');
+    // print('Status: ${response.statusCode}');
+    // print('Body: ${response.body}');
     if (response.statusCode == 200) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cập nhật thành công!')),
