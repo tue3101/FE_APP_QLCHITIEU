@@ -37,6 +37,7 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0; // New state variable for bottom navigation bar
   late PageController _pageController; // New page controller
   final formatter = NumberFormat('#,###', 'vi_VN');
+  DateTime _selectedDate = DateTime.now();
 
   // State for monthly expense
   double _monthlyExpense = 0.0; //chi phí hàng tháng
@@ -60,10 +61,10 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadData() async {
     setState(() { isLoading = true; });
-    print('Loading data...');
+    print('Loading data for month: ${_selectedDate.month}/${_selectedDate.year}');
     try {
       await Future.wait([
-        fetchTransactions(),
+        fetchTransactionsForMonth(),
         _fetchDefaultCategories(),
         _fetchUserCategories(),
         _fetchColors(),
@@ -75,7 +76,7 @@ class _HomePageState extends State<HomePage> {
       // Calculate balance after all data is fetched and processed
       // tính số dư
       setState(() {
-        balance = totalIncome - totalExpense; // số dư = tổng thu nhập - tổng chi tiêu
+        balance = totalIncome - (totalExpense + _monthlyExpense.toInt()); // số dư = tổng thu nhập - tổng chi tiêu
         isLoading = false;
       });
       print('Data loading complete.');
@@ -218,25 +219,28 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> fetchTransactions() async {
-    setState(() {
-      isLoading = true;
-    });
-    print('Fetching transactions...');
+  Future<void> fetchTransactionsForMonth() async {
+    print('Fetching transactions for: ${_selectedDate.month}/${_selectedDate.year}');
     try {
-      final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transactions/user/${widget.idnguodung}/all');
+      final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transactions/user/${widget.idnguodung}/month/${_selectedDate.month}/year/${_selectedDate.year}');
       final response = await http.get(
         url,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${widget.token}',
-          // Headers để chống cache
+          //Yêu cầu trình duyệt hoặc proxy không lưu cache kết quả này.
+          //no-cache : xác minh lại server trc khi dùng
+          //no-store: ko được lưu cache ở bất cứ đâu
+          //must-revalidate: nếu cache hết hạn phải hỏi lại server
           'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-        },
+          'Pragma': 'no-cache', //đảm bảo tương thích ngược với hệ thống cũ
+          'Expires': '0', //Không được lưu cache, hết hạn ngay lập tức
+
+
+      },
       );
-      if (await auth_utils.handleApiResponse(context, response, widget.token, widget.idnguodung)) return; // Corrected call
+      if (await auth_utils.handleApiResponse(context, response, widget.token, widget.idnguodung)) return;
+      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         List<dynamic> fetchedTransactions = [];
@@ -245,6 +249,7 @@ class _HomePageState extends State<HomePage> {
         } else if (data is Map && data['data'] is List) {
           fetchedTransactions = data['data'];
         }
+        
         setState(() {
           transactions = fetchedTransactions;
           totalIncome = 0;
@@ -253,82 +258,167 @@ class _HomePageState extends State<HomePage> {
           _dailyTotals = {};
 
           for (var t in transactions) {
-            print('Processing transaction: $t');
             double sotien = (t['so_tien'] as num?)?.toDouble() ?? 0.0;
             String loaiGiaoDichId = t['id_loai']?.toString() ?? '0';
-            // Parse date string from 'DD/MM/YYYY' to DateTime object
-            final String ngayString = t['ngay'] is String ? t['ngay'] : '01/01/1970'; // Default date if null or not string
+            final String ngayString = t['ngay'] is String ? t['ngay'] : '01/01/1970';
             final transactionDate = _parseDateString(ngayString);
             final formattedDate = _formatDate(transactionDate);
 
-            // kiểm tra có khóa formatt... ko
             if (!_groupedTransactions.containsKey(formattedDate)) {
               _groupedTransactions[formattedDate] = [];
               _dailyTotals[formattedDate] = {'income': 0, 'expense': 0};
             }
             _groupedTransactions[formattedDate]!.add(t);
 
-            // Calculate daily totals and overall totals
-            if (loaiGiaoDichId == '1') { // Assuming '1' is Income
+            if (loaiGiaoDichId == '1') {
               totalIncome += sotien.toInt();
-              //lấy thu nhập của ngày đảm bảo ngày ko null + totien kieu int
+              //!->khẳng định giá trị ko null
               _dailyTotals[formattedDate]!['income'] = _dailyTotals[formattedDate]!['income']! + sotien.toInt();
-            } else if (loaiGiaoDichId == '2') { // Assuming '2' is Expense
-              totalExpense += sotien.toInt(); // Sum expense amount as positive
+            } else if (loaiGiaoDichId == '2') {
+              totalExpense += sotien.toInt();
               _dailyTotals[formattedDate]!['expense'] = _dailyTotals[formattedDate]!['expense']! + sotien.toInt();
             }
-
-            // Find the category for this transaction using id_danhmuc
-            final category = _allCategories.firstWhere((cat)
-            {
-                final int? categoryId = int.tryParse(cat['id_danhmuc']?.toString() ?? '');
-                final int? transactionCategoryId = int.tryParse(t['id_danhmuc']?.toString() ?? '');
-                return categoryId == transactionCategoryId;
-              },
-              orElse: () => {}, // Return an empty map if category not found to prevent TypeError
-            );
-            print('Category found: $category');
           }
-          // print('Grouped transactions after loop: $_groupedTransactions'); // Commented out to avoid clutter
-          // print('Daily totals after loop: $_dailyTotals'); // Commented out to avoid clutter
-
-          // Sort dates in descending order
-          final sortedDates = _groupedTransactions.keys.toList()..sort((a, b) {
-              final dateA = _parseFormattedDateString(a);
-              final dateB = _parseFormattedDateString(b);
-              return dateB.compareTo(dateA);
-            });
-
-
-          //sắp xếp lại thứ tự các giao dịch và tổng thu/chi theo ngày
-          // tạo map mới
+          //chuyển các key trong map thành list
+          final sortedDates = _groupedTransactions.keys.toList()..sort((a, b) { //so sánh a với b
+            final dateA = _parseFormattedDateString(a);
+            final dateB = _parseFormattedDateString(b);
+            return dateB.compareTo(dateA); //giảm dần
+          });
+          //tạo biến lưu các giao dịch theo từng ngày
           final sortedGroupedTransactions = <String, List<dynamic>>{};
-          final sortedDailyTotals = <String, Map<String, int>>{}; //map có value là kiểu map với key:value
+          //lưu tổng tiền chi tiêu, thu nhập... theo ngày
+          final sortedDailyTotals = <String, Map<String, int>>{};
           for (var date in sortedDates) {
             sortedGroupedTransactions[date] = _groupedTransactions[date]!;
             sortedDailyTotals[date] = _dailyTotals[date]!;
           }
-          //lưu vào 2 biến
           _groupedTransactions = sortedGroupedTransactions;
           _dailyTotals = sortedDailyTotals;
 
-          // balance = totalIncome - totalExpense; // Removed: Balance calculation moved to _loadData
-          isLoading = false;
-          print('Transactions fetched and processed successfully.');
+
         });
+
+        print('Transactions fetched and processed successfully for the month.');
       } else {
-        print('Failed to load transactions: ${response.statusCode}');
-        setState(() {
-          isLoading = false;
-        });
+        print('Failed to load transactions for month: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching transactions: $e');
-      setState(() {
-        isLoading = false;
-      });
+      print('Error fetching transactions for month: $e');
     }
   }
+  //
+  // Future<void> fetchTransactions() async {
+  //   setState(() {
+  //     isLoading = true;
+  //   });
+  //   print('Fetching transactions...');
+  //   try {
+  //     final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transactions/user/${widget.idnguodung}/all');
+  //     final response = await http.get(
+  //       url,
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         'Authorization': 'Bearer ${widget.token}',
+  //         // Headers để chống cache
+  //         'Cache-Control': 'no-cache, no-store, must-revalidate',
+  //         'Pragma': 'no-cache',
+  //         'Expires': '0',
+  //       },
+  //     );
+  //     if (await auth_utils.handleApiResponse(context, response, widget.token, widget.idnguodung)) return; // Corrected call
+  //     if (response.statusCode == 200) {
+  //       final data = jsonDecode(response.body);
+  //       List<dynamic> fetchedTransactions = [];
+  //       if (data is List) {
+  //         fetchedTransactions = data;
+  //       } else if (data is Map && data['data'] is List) {
+  //         fetchedTransactions = data['data'];
+  //       }
+  //       setState(() {
+  //         transactions = fetchedTransactions;
+  //         totalIncome = 0;
+  //         totalExpense = 0;
+  //         _groupedTransactions = {};
+  //         _dailyTotals = {};
+  //
+  //         for (var t in transactions) {
+  //           print('Processing transaction: $t');
+  //           double sotien = (t['so_tien'] as num?)?.toDouble() ?? 0.0;
+  //           String loaiGiaoDichId = t['id_loai']?.toString() ?? '0';
+  //           // Parse date string from 'DD/MM/YYYY' to DateTime object
+  //           final String ngayString = t['ngay'] is String ? t['ngay'] : '01/01/1970'; // Default date if null or not string
+  //           final transactionDate = _parseDateString(ngayString);
+  //           final formattedDate = _formatDate(transactionDate);
+  //
+  //           // kiểm tra có khóa formatt... ko
+  //           if (!_groupedTransactions.containsKey(formattedDate)) {
+  //             _groupedTransactions[formattedDate] = [];
+  //             _dailyTotals[formattedDate] = {'income': 0, 'expense': 0};
+  //           }
+  //           _groupedTransactions[formattedDate]!.add(t);
+  //
+  //           // Calculate daily totals and overall totals
+  //           if (loaiGiaoDichId == '1') { // Assuming '1' is Income
+  //             totalIncome += sotien.toInt();
+  //             //lấy thu nhập của ngày đảm bảo ngày ko null + totien kieu int
+  //             _dailyTotals[formattedDate]!['income'] = _dailyTotals[formattedDate]!['income']! + sotien.toInt();
+  //           } else if (loaiGiaoDichId == '2') { // Assuming '2' is Expense
+  //             totalExpense += sotien.toInt(); // Sum expense amount as positive
+  //             _dailyTotals[formattedDate]!['expense'] = _dailyTotals[formattedDate]!['expense']! + sotien.toInt();
+  //           }
+  //
+  //           // Find the category for this transaction using id_danhmuc
+  //           final category = _allCategories.firstWhere((cat)
+  //           {
+  //               final int? categoryId = int.tryParse(cat['id_danhmuc']?.toString() ?? '');
+  //               final int? transactionCategoryId = int.tryParse(t['id_danhmuc']?.toString() ?? '');
+  //               return categoryId == transactionCategoryId;
+  //             },
+  //             orElse: () => {}, // Return an empty map if category not found to prevent TypeError
+  //           );
+  //           print('Category found: $category');
+  //         }
+  //         // print('Grouped transactions after loop: $_groupedTransactions'); // Commented out to avoid clutter
+  //         // print('Daily totals after loop: $_dailyTotals'); // Commented out to avoid clutter
+  //
+  //         // Sort dates in descending order
+  //         final sortedDates = _groupedTransactions.keys.toList()..sort((a, b) {
+  //             final dateA = _parseFormattedDateString(a);
+  //             final dateB = _parseFormattedDateString(b);
+  //             return dateB.compareTo(dateA);
+  //           });
+  //
+  //
+  //         //sắp xếp lại thứ tự các giao dịch và tổng thu/chi theo ngày
+  //         // tạo map mới
+  //         final sortedGroupedTransactions = <String, List<dynamic>>{};
+  //         final sortedDailyTotals = <String, Map<String, int>>{}; //map có value là kiểu map với key:value
+  //         for (var date in sortedDates) {
+  //           sortedGroupedTransactions[date] = _groupedTransactions[date]!;
+  //           sortedDailyTotals[date] = _dailyTotals[date]!;
+  //         }
+  //         //lưu vào 2 biến
+  //         _groupedTransactions = sortedGroupedTransactions;
+  //         _dailyTotals = sortedDailyTotals;
+  //
+  //         // balance = totalIncome - totalExpense; // Removed: Balance calculation moved to _loadData
+  //         isLoading = false;
+  //         print('Transactions fetched and processed successfully.');
+  //       });
+  //     } else {
+  //       print('Failed to load transactions: ${response.statusCode}');
+  //       setState(() {
+  //         isLoading = false;
+  //       });
+  //     }
+  //   } catch (e) {
+  //     print('Error fetching transactions: $e');
+  //     setState(() {
+  //       isLoading = false;
+  //     });
+  //   }
+  // }
 
   Future<List<dynamic>> fetchTransactionsByMonth(int userId, int month, int year) async {
     final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transactions/user/$userId/month/$month/year/$year');
@@ -370,7 +460,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  //fetch dữ liệu
+  //gọi hàm trên và cập nhật UI
   Future<void> fetchMonthlyExpense() async {
     if (!mounted) return; //!mounted có nghĩa là widget đã bị hủy
     setState(() {
@@ -380,8 +470,7 @@ class _HomePageState extends State<HomePage> {
       final userId = int.tryParse(widget.idnguodung.toString());
       if (userId == null) throw Exception("User ID không hợp lệ");
 
-      final now = DateTime.now();
-      final expense = await fetchTongChiTieuHangThang(userId, now.month, now.year);
+      final expense = await fetchTongChiTieuHangThang(userId, _selectedDate.month, _selectedDate.year);
 
       if (mounted) {
         setState(() {
@@ -399,14 +488,32 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _onItemTapped(int index) {
-    _pageController.jumpToPage(index);
+  Future<void> _selectMonth(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000), //bắt đàu từ 1/1/2000
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)), // ngày cuối cùng được chọn là 5 năm sau tính từ hôm nay
+      locale: const Locale('vi', 'VN'),//Thiết lập ngôn ngữ và quốc gia
+      helpText: 'CHỌN THÁNG',
+      //initialDatePickerMode xác định chế độ hiển thị ban đầu khi mở hộp thoại chọn ngày.
+      //DatePickerMode.year có nghĩa là hiển thị màn hình chọn năm ngay từ đầu (thay vì chọn ngày luôn).
+      initialDatePickerMode: DatePickerMode.year,
+    );
+
+    if (picked != null && (picked.month != _selectedDate.month || picked.year != _selectedDate.year)) {
+      setState(() {
+        //Tạo một DateTime mới từ năm và tháng của picked, nhưng gán ngày là 1
+        _selectedDate = DateTime(picked.year, picked.month, 1);
+      });
+      _loadData(); // Reload data for the new month
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now(); //thời gian hiện tại của ht
-    const double blueHeaderHeight = 220.0;
+    final now = DateTime.now(); //thời gian hiện tại của hthong
+    const double blueHeaderHeight = 220.0; //chiều cao cố định
     const double overlapAmount = 20.0;
     final List<Widget> _pages = [
       Stack(
@@ -432,12 +539,27 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today, color: Colors.white, size: 18),
-                      const SizedBox(width: 8),
-                      //YYYY-MM số dư
-                      Text('${now.year}-${now.month.toString().padLeft(2, '0')} Số dư', style: const TextStyle(color: Colors.white, fontSize: 16)),
-                      //tạo khoảng trống
-                      const Spacer(),
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => _selectMonth(context),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                            alignment: Alignment.centerLeft,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.calendar_today, color: Colors.white, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')} Số dư',
+                                style: const TextStyle(color: Colors.white, fontSize: 16)
+                              ),
+                              const Icon(Icons.arrow_drop_down, color: Colors.white),
+                            ],
+                          ),
+                        ),
+                      ),
                       PopupMenuButton<String>(
                         onSelected: (value) {
                           if (value == 'logout') {
@@ -463,7 +585,7 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       const Text('Chi tiêu: ', style: TextStyle(color: Colors.white70, fontSize: 16)),
                       //$ dùng chèn giá trị biến/bthuc
-                      Text('${formatter.format(totalExpense)}', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                      Text('${formatter.format(totalExpense + _monthlyExpense.toInt())}', style: const TextStyle(color: Colors.white, fontSize: 16)),
                       const SizedBox(width: 16),
                       const Text('Thu nhập: ', style: TextStyle(color: Colors.white70, fontSize: 16)),
                       Text('+${formatter.format(totalIncome)}', style: const TextStyle(color: Colors.white, fontSize: 16)),
@@ -550,6 +672,7 @@ class _HomePageState extends State<HomePage> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
+                  //sử dụng toán tử spread (...) kết hợp với .map() để chèn nhiều widget (hoặc phần tử) vào danh sách
                   ..._groupedTransactions.keys.map((date) {
                     final dailyIncome = _dailyTotals[date]!['income']!;
                     final dailyExpense = _dailyTotals[date]!['expense']!;
@@ -572,8 +695,9 @@ class _HomePageState extends State<HomePage> {
                             ],
                           ),
                         ),
+                        //sử dụng toán tử spread (...) kết hợp với .map() để chèn nhiều widget (hoặc phần tử) vào danh sách
                         ..._groupedTransactions[date]!.map((t) {
-                          final category = _allCategories.firstWhere(
+                          final category = _allCategories.firstWhere(//tìm phần tử đầu tiên trong một danh sách
                             (cat) {
                               final int? categoryId = int.tryParse(cat['id_danhmuc']?.toString() ?? '');
                               final int? transactionCategoryId = int.tryParse(t['id_danhmuc']?.toString() ?? '');
@@ -587,6 +711,7 @@ class _HomePageState extends State<HomePage> {
                           final categoryName = category?['ten_danh_muc'] ?? 'Không rõ';
 
                           double amountValue = (t['so_tien'] as num?)?.toDouble() ?? 0.0;
+                          //formatter.format(...)	Định dạng tiền có dấu phân cách, đơn vị
                           final amountText = ((t['id_loai'].toString() == '1') ? '+' : '-') + formatter.format(amountValue);
                           final amountColor = (t['id_loai'].toString() == '1') ? Colors.blue : Colors.black;
 
@@ -627,7 +752,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      // Page 2: ManageCategoriesPage
+      // back từ danh mục về home
       ManageCategoriesPage(
         token: widget.token,
         idnguodung: widget.idnguodung,
@@ -635,7 +760,7 @@ class _HomePageState extends State<HomePage> {
           setState(() {
             _selectedIndex = 0; // Set index back to home page
           });
-          _pageController.jumpToPage(0); // Navigate to home page
+          _pageController.jumpToPage(0);
           fetchMonthlyExpense(); // Tải lại chi tiêu hàng tháng khi quay về
         },
       ),
@@ -745,6 +870,8 @@ class _HomePageState extends State<HomePage> {
 
 
   //Hàm định dạng một đối tượng DateTime thành chuỗi kiểu "ngày thg tháng, năm"
+  //Sau khi có đối tượng DateTime, nhóm các giao dịch trong cùng một ngày lại với nhau
+  // hiển thị một tiêu đề  cho mỗi nhóm (ví dụ: "25 thg 5, 2025").
   String _formatDate(DateTime date) {
     final day = date.day;
     final month = date.month;
@@ -754,6 +881,8 @@ class _HomePageState extends State<HomePage> {
 
 
   //Hàm chuyển đổi một chuỗi định dạng ngày kiểu "DD/MM/YYYY" thành đối tượng DateTime
+  //Dữ liệu ngày tháng từ API của bạn có dạng chuỗi String kiểu "DD/MM/YYYY" (ví dụ: "25/05/2025").
+  // Để máy tính có thể hiểu và so sánh được,cần chuyển nó thành đối tượng DateTime.
   DateTime _parseDateString(String dateString) {
     final parts = dateString.split('/'); // dateString is like "DD/MM/YYYY"
     final day = int.parse(parts[0]);
@@ -763,6 +892,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   //hàm chuyển chuỗi ngày dạng DD thg MM, YYYY thành DateTime
+  //Để sắp xếp đúng theo thứ tự thời gian , phải chuyển các chuỗi này ngược lại thành đối tượng DateTime để so sánh.
   DateTime _parseFormattedDateString(String formattedDateString) {
     final parts = formattedDateString.split(' '); //tách thành "DD", "thg", "MM," , "YYYY"
     final day = int.parse(parts[0]);
@@ -771,16 +901,15 @@ class _HomePageState extends State<HomePage> {
     return DateTime(year, month, day);
   }
 
-  double tinhTongThuNhap(List<dynamic> transactions) {
-    // This function is no longer needed for the main balance but might be used elsewhere.
-    // Let's keep it for now but acknowledge it's not for the main balance display.
-    return transactions
-        .where((tran) => tran['id_loai'].toString() == '1')
-        .fold(0.0, (sum, tran) {
-          final soTien = double.tryParse(tran['so_tien'].toString()) ?? 0.0;
-          return sum + soTien;
-        });
-  }
+  // double tinhTongThuNhap(List<dynamic> transactions) {
+  //
+  //   return transactions
+  //       .where((tran) => tran['id_loai'].toString() == '1')
+  //       .fold(0.0, (sum, tran) {
+  //         final soTien = double.tryParse(tran['so_tien'].toString()) ?? 0.0;
+  //         return sum + soTien;
+  //       });
+  // }
 
   Widget buildThuNhapWidget() {
     if (_isBalanceLoading) {
@@ -794,9 +923,10 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
+    //tạo một định dạng số có dấu phân cách hàng nghìn theo chuẩn Việt Nam
     final formatter = NumberFormat('#,###', 'vi_VN');
     // Balance = Total Income (ad-hoc) - Monthly Expense - Ad-hoc Expense
-    final soDuHienTai = totalIncome - totalExpense - _monthlyExpense;
+    final soDuHienTai = totalIncome - (totalExpense + _monthlyExpense);
 
     return Text(
       formatter.format(soDuHienTai.toInt()),
@@ -808,36 +938,36 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _navigateToUpdateTransaction(dynamic transactionData) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UpdateTransactionPage(
-          token: widget.token,
-          idnguodung: widget.idnguodung,
-          transactionData: transactionData,
-        ),
-      ),
-    );
+  // void _navigateToUpdateTransaction(dynamic transactionData) async {
+  //   final result = await Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (context) => UpdateTransactionPage(
+  //         token: widget.token,
+  //         idnguodung: widget.idnguodung,
+  //         transactionData: transactionData,
+  //       ),
+  //     ),
+  //   );
+  //
+  //   if (result == true) {
+  //     _loadData();
+  //   }
+  // }
 
-    if (result == true) {
-      _loadData();
-    }
-  }
-
-  String _getCategoryName(int? categoryId) {
-    if (categoryId == null) {
-      return 'Không rõ';
-    }
-    try {
-      final category = _allCategories.firstWhere(
-        (cat) => (cat['id_danhmuc'] as int?) == categoryId,
-      );
-      return category['ten_danh_muc'] as String? ?? 'Không rõ';
-    } catch (e) {
-      return 'Không rõ';
-    }
-  }
+  // String _getCategoryName(int? categoryId) {
+  //   if (categoryId == null) {
+  //     return 'Không rõ';
+  //   }
+  //   try {
+  //     final category = _allCategories.firstWhere(
+  //       (cat) => (cat['id_danhmuc'] as int?) == categoryId,
+  //     );
+  //     return category['ten_danh_muc'] as String? ?? 'Không rõ';
+  //   } catch (e) {
+  //     return 'Không rõ';
+  //   }
+  // }
 
   
 }
@@ -852,6 +982,7 @@ class _TransactionItem extends StatelessWidget {
   final dynamic transactionData;
 
   const _TransactionItem({
+    //bắt buộc truyền các tham số này
     required this.icon,
     required this.iconColor,
     required this.title,
