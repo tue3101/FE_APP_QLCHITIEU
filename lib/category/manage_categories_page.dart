@@ -570,8 +570,10 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
 
   Widget buildThuNhapWidget() {
     // Lọc danh mục thu nhập
-    final userThuNhap = _userCategories.where((cat) => cat['id_loai'] == 1).toList();
-    final defaultThuNhap = _defaultCategories.where((cat) => cat['id_loai'] == 1).toList();
+    final userThuNhap = _userCategories.where((cat)
+    => cat['id_loai'] == 1).toList();
+    final defaultThuNhap = _defaultCategories.where((cat)
+    => cat['id_loai'] == 1).toList();
 
     List<Widget> widgets = [];
 
@@ -795,12 +797,12 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
           chiTieuData = []; // Handle other cases gracefully
         }
 
-        // Nếu có nhiều khoản, cộng tổng lại
+        // tổng chi
         int tongSoTien = 0;
         for (var item in chiTieuData) {
-          final soTien = item['amount']; // Sửa từ 'so_tien' thành 'amount'
+          final soTien = item['amount'];
           if (soTien != null) {
-            final parsedValue = double.tryParse(soTien.toString()) ?? 0.0;
+            final parsedValue = double.tryParse(soTien.toString()) ?? 0.0; //ko chuyển đc -> 0.0
             tongSoTien += parsedValue.toInt();
           }
         }
@@ -875,6 +877,7 @@ class _CategoryItem extends StatelessWidget {
 
   const _CategoryItem({
     super.key,
+    //bắt buộc truyền các giá trị này
     required this.icon,
     required this.iconColor,
     required this.title,

@@ -39,6 +39,7 @@ dependencies:
   intl: ^0.18.0
   math_expressions: ^2.3.0
   shared_preferences: ^2.5.3
+  fl_chart: ^0.68.0
 
 
 dev_dependencies:

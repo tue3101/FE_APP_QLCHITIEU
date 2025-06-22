@@ -762,8 +762,6 @@ class _UpdateTransactionPageState extends State<UpdateTransactionPage> with Tick
       'id_nguoidung': widget.idnguodung,
     });
 
-
-
     try {
       final response = await http.put(
         url,
@@ -774,26 +772,27 @@ class _UpdateTransactionPageState extends State<UpdateTransactionPage> with Tick
         body: body,
       );
 
-
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cập nhật giao dịch thành công!')),
-        );
-        Navigator.pop(context, true);
-      } else if (response.statusCode == 403) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cập nhật giao dịch thất bại: ${response.body}')),
-        );
+        if (mounted) {
+           Navigator.pop(context, true);
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cập nhật giao dịch thất bại: ${response.statusCode}')),
-        );
+        print('Cập nhật giao dịch thất bại: ${response.body}');
+        if (mounted) {
+          Navigator.pop(context, false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Cập nhật thất bại: ${response.body}')),
+          );
+        }
       }
     } catch (e) {
-      print('Error updating transaction: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi khi cập nhật giao dịch: $e')),
-      );
+      print('Lỗi khi cập nhật giao dịch: $e');
+      if (mounted) {
+        Navigator.pop(context, false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
     }
   }
 

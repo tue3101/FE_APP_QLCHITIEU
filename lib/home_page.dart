@@ -10,6 +10,7 @@ import '../main.dart';
 import 'utils/auth_utils.dart' as auth_utils;
 import 'category/manage_categories_page.dart';
 import 'package:intl/intl.dart';
+import 'chart/chart_page.dart';
 
 class HomePage extends StatefulWidget {
   final String token;
@@ -38,8 +39,11 @@ class _HomePageState extends State<HomePage> {
   final formatter = NumberFormat('#,###', 'vi_VN');
 
   // State for monthly expense
-  double _monthlyExpense = 0.0;
-  bool _isBalanceLoading = true;
+  double _monthlyExpense = 0.0; //chi phí hàng tháng
+  bool _isBalanceLoading = true; //cờ số dư
+
+  //tạo globalkey truy cập tới chartpage và trạng thái state
+  final GlobalKey<ChartPageState> _chartPageKey = GlobalKey<ChartPageState>();
 
   @override
   void initState() {
@@ -67,11 +71,11 @@ class _HomePageState extends State<HomePage> {
         fetchMonthlyExpense(), // Fetch monthly expense along with other data
       ]);
       print('All data fetched successfully. Combining categories...');
-      _combineCategories();
+      _combineCategories(); //kết hợp danh mục
       // Calculate balance after all data is fetched and processed
       // tính số dư
       setState(() {
-        balance = totalIncome - totalExpense; // Calculate balance here
+        balance = totalIncome - totalExpense; // số dư = tổng thu nhập - tổng chi tiêu
         isLoading = false;
       });
       print('Data loading complete.');
@@ -226,6 +230,10 @@ class _HomePageState extends State<HomePage> {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${widget.token}',
+          // Headers để chống cache
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
       );
       if (await auth_utils.handleApiResponse(context, response, widget.token, widget.idnguodung)) return; // Corrected call
@@ -253,7 +261,7 @@ class _HomePageState extends State<HomePage> {
             final transactionDate = _parseDateString(ngayString);
             final formattedDate = _formatDate(transactionDate);
 
-            // Group transactions by date
+            // kiểm tra có khóa formatt... ko
             if (!_groupedTransactions.containsKey(formattedDate)) {
               _groupedTransactions[formattedDate] = [];
               _dailyTotals[formattedDate] = {'income': 0, 'expense': 0};
@@ -263,6 +271,7 @@ class _HomePageState extends State<HomePage> {
             // Calculate daily totals and overall totals
             if (loaiGiaoDichId == '1') { // Assuming '1' is Income
               totalIncome += sotien.toInt();
+              //lấy thu nhập của ngày đảm bảo ngày ko null + totien kieu int
               _dailyTotals[formattedDate]!['income'] = _dailyTotals[formattedDate]!['income']! + sotien.toInt();
             } else if (loaiGiaoDichId == '2') { // Assuming '2' is Expense
               totalExpense += sotien.toInt(); // Sum expense amount as positive
@@ -340,6 +349,8 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+
+  //lấy về chi tiêu hàng tháng
   Future<double> fetchTongChiTieuHangThang(int userId, int month, int year) async {
     final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/chi-tieu-hang-thang/user/$userId/month/$month/year/$year');
     final response = await http.get(url, headers: {
@@ -359,8 +370,9 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  //fetch dữ liệu
   Future<void> fetchMonthlyExpense() async {
-    if (!mounted) return;
+    if (!mounted) return; //!mounted có nghĩa là widget đã bị hủy
     setState(() {
       _isBalanceLoading = true;
     });
@@ -385,6 +397,10 @@ class _HomePageState extends State<HomePage> {
         });
       }
     }
+  }
+
+  void _onItemTapped(int index) {
+    _pageController.jumpToPage(index);
   }
 
   @override
@@ -623,9 +639,14 @@ class _HomePageState extends State<HomePage> {
           fetchMonthlyExpense(); // Tải lại chi tiêu hàng tháng khi quay về
         },
       ),
-      // Page 3: Placeholder for pie chart
-      const Center(child: Text('Biểu đồ', style: TextStyle(fontSize: 24))), 
-      // Page 4: Placeholder for VIP - This page will be removed
+      // back từ biểu đồ về home
+      ChartPage(
+        key: _chartPageKey,//truyền một key định danh widget
+        token: widget.token, //truyền token
+        idnguoidung: widget.idnguodung, //truyền id người dùng
+        onBack: () => _pageController.jumpToPage(0), //callback về home
+      ),
+
     ];
 
     return Scaffold(
@@ -674,14 +695,15 @@ class _HomePageState extends State<HomePage> {
                         _pageController.jumpToPage(1);
                       },
                     ),
-                    IconButton(
+                    IconButton( //click vào icon biểu đồ để chuyển trang
                       icon: const Icon(Icons.pie_chart),
+                      //nếu index==2 thì trả màu xanh dương ko thì màu xanh lá
                       color: _selectedIndex == 2 ? Colors.blue : Colors.grey,
-                      onPressed: () {
-                        setState(() {
+                      onPressed: () {//xử lý nhấn vào icon
+                        setState(() { //cập nhật trang thái của index = 2
                           _selectedIndex = 2;
                         });
-                        _pageController.jumpToPage(2);
+                        _pageController.jumpToPage(2);//điểu khiển trang nhảy sang số 2
                       },
                     ),
                     const Spacer(), // Đẩy khoảng trống và nút về bên phải
@@ -703,8 +725,12 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 );
-                if (result == true) {
-                  fetchTransactions();
+                //load biểu đồ khi thêm mới giao dịch
+                if (result == true) { //nếu kết quả là true
+                  _loadData();//load dữ liệu
+                  //nếu chartpage được hiển thị thì current sẽ chứa chartPState và load lại dữ liệu còn ko thì trả về null
+                  _chartPageKey.currentState?.reloadData();
+                  //biến globalkey
                 }
               },
               backgroundColor: const Color(0xFF2196F3),
@@ -717,6 +743,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+
+  //Hàm định dạng một đối tượng DateTime thành chuỗi kiểu "ngày thg tháng, năm"
   String _formatDate(DateTime date) {
     final day = date.day;
     final month = date.month;
@@ -724,6 +752,8 @@ class _HomePageState extends State<HomePage> {
     return '$day thg $month, $year';
   }
 
+
+  //Hàm chuyển đổi một chuỗi định dạng ngày kiểu "DD/MM/YYYY" thành đối tượng DateTime
   DateTime _parseDateString(String dateString) {
     final parts = dateString.split('/'); // dateString is like "DD/MM/YYYY"
     final day = int.parse(parts[0]);
@@ -771,12 +801,45 @@ class _HomePageState extends State<HomePage> {
     return Text(
       formatter.format(soDuHienTai.toInt()),
       style: TextStyle(
-        color: soDuHienTai < 0 ? Colors.red : Colors.green,
+        color: soDuHienTai < 0 ? Colors.red : Colors.white,
         fontSize: 32,
         fontWeight: FontWeight.bold,
       ),
     );
   }
+
+  void _navigateToUpdateTransaction(dynamic transactionData) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UpdateTransactionPage(
+          token: widget.token,
+          idnguodung: widget.idnguodung,
+          transactionData: transactionData,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _loadData();
+    }
+  }
+
+  String _getCategoryName(int? categoryId) {
+    if (categoryId == null) {
+      return 'Không rõ';
+    }
+    try {
+      final category = _allCategories.firstWhere(
+        (cat) => (cat['id_danhmuc'] as int?) == categoryId,
+      );
+      return category['ten_danh_muc'] as String? ?? 'Không rõ';
+    } catch (e) {
+      return 'Không rõ';
+    }
+  }
+
+  
 }
 
 class _TransactionItem extends StatelessWidget {
