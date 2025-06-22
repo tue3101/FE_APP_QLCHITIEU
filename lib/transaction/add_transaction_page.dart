@@ -578,7 +578,9 @@ class _AddTransactionPageState extends State<AddTransactionPage> with TickerProv
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Thêm giao dịch thành công!')),
         );
-        Navigator.pop(context, true); // Quay lại trang trước và làm mới dữ liệu
+        if (mounted) {
+          Navigator.pop(context, true);
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Thêm giao dịch thất bại: ${response.statusCode}')),
