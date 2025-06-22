@@ -14,7 +14,7 @@ class ChartPage extends StatefulWidget {
 
   const ChartPage({
     //super.key đảm bảo key được truyền lên StatefulWidget
-    // giúp Flutter biết widget này là “cũ” hay “mới” khi so sánh UI.
+    // giúp Flutter biết widget này là "cũ" hay "mới" khi so sánh UI.
     super.key,
     //bắt buộc truyền các tham số này
     required this.token,
@@ -255,16 +255,16 @@ class ChartPageState extends State<ChartPage> {
       // --- PHÂN LOẠI VÀO CHI TIÊU HOẶC THU NHẬP ---
       if (isExpense) { //isExpense -> true -> chi tiêu
         variableExpenseTotal += amount;
-        expenseCategoryDetails.update( //update dùng cập nhật lại giá trị theo categoryName
-          categoryName,//key phân loại
-          //nếu đã có danh mục
-          (existing) => {
-            ...existing, //giữ lại các trường cũ
-            'amount': existing['amount'] + amount, //cộng dồn số tiền
-            'count': existing['count'] + 1 //tăng số lần xuất hien
+        expenseCategoryDetails.update(
+          categoryName,
+          (existing) => <String, dynamic>{
+            'name': existing['name'],
+            'amount': (existing['amount'] as num) + amount,
+            'color': existing['color'],
+            'icon': existing['icon'],
+            'count': (existing['count'] as int) + 1,
           },
-          //nếu chưa có tạo mơi danh mục
-          ifAbsent: () => {
+          ifAbsent: () => <String, dynamic>{
             'name': categoryName,
             'amount': amount,
             'color': color,
@@ -276,14 +276,14 @@ class ChartPageState extends State<ChartPage> {
         incomeTotal += amount;
         incomeCategoryDetails.update(
           categoryName,
-          //đã có danh mục
-          (existing) => {
-            ...existing,
-            'amount': existing['amount'] + amount,
-            'count': existing['count'] + 1
+          (existing) => <String, dynamic>{
+            'name': existing['name'],
+            'amount': (existing['amount'] as num) + amount,
+            'color': existing['color'],
+            'icon': existing['icon'],
+            'count': (existing['count'] as int) + 1,
           },
-          //chưa có danh mục
-          ifAbsent: () => {
+          ifAbsent: () => <String, dynamic>{
             'name': categoryName,
             'amount': amount,
             'color': color,
@@ -313,9 +313,13 @@ class ChartPageState extends State<ChartPage> {
     if (mounted) {
       setState(() {
         _totalExpense = grandTotalExpense;
-        _categoryExpenseDetails = List<Map<String, dynamic>>.from(expenseDetailsList);
+        _categoryExpenseDetails = expenseDetailsList.map<Map<String, dynamic>>(
+          (e) => Map<String, dynamic>.from(e as Map)
+        ).toList();
         _totalIncome = incomeTotal;
-        _categoryIncomeDetails = List<Map<String, dynamic>>.from(incomeDetailsList);
+        _categoryIncomeDetails = incomeDetailsList.map<Map<String, dynamic>>(
+          (e) => Map<String, dynamic>.from(e as Map)
+        ).toList();
       });
     }
   }
