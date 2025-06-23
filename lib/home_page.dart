@@ -11,6 +11,7 @@ import 'utils/auth_utils.dart' as auth_utils;
 import 'category/manage_categories_page.dart';
 import 'package:intl/intl.dart';
 import 'chart/chart_page.dart';
+import 'services/notification_service.dart';
 
 class HomePage extends StatefulWidget {
   final String token;
@@ -29,6 +30,7 @@ class _HomePageState extends State<HomePage> {
   int totalIncome = 0;
   int totalExpense = 0;
   int balance = 0; //số dư
+  Map<String, dynamic>? _budgetData; //tạo biên map có thể null
   List<dynamic> _defaultCategories = [];
   List<dynamic> _userCategories = [];
   List<dynamic> _colors = [];
@@ -50,6 +52,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _pageController = PageController(); // Initialize page controller
+    _autoDeductMonthlyExpense(); // Thêm dòng này để tự động trừ khi sang tháng mới
     _loadData(); // Load all necessary data
   }
 
@@ -69,14 +72,14 @@ class _HomePageState extends State<HomePage> {
         _fetchUserCategories(),
         _fetchColors(),
         _fetchIcons(),
-        fetchMonthlyExpense(), // Fetch monthly expense along with other data
+        fetchMonthlyExpense(), // vẫn gọi để hiển thị riêng nếu cần
+        _fetchBudget(),
       ]);
       print('All data fetched successfully. Combining categories...');
       _combineCategories(); //kết hợp danh mục
-      // Calculate balance after all data is fetched and processed
-      // tính số dư
+      // Chỉ lấy tổng chi tiêu từ các giao dịch thực tế
       setState(() {
-        balance = totalIncome - (totalExpense + _monthlyExpense.toInt()); // số dư = tổng thu nhập - tổng chi tiêu
+        balance = totalIncome - totalExpense; // Số dư = thu nhập - chi tiêu thực tế
         isLoading = false;
       });
       print('Data loading complete.');
@@ -237,10 +240,10 @@ class _HomePageState extends State<HomePage> {
           'Expires': '0', //Không được lưu cache, hết hạn ngay lập tức
 
 
-      },
+        },
       );
       if (await auth_utils.handleApiResponse(context, response, widget.token, widget.idnguodung)) return;
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         List<dynamic> fetchedTransactions = [];
@@ -249,7 +252,7 @@ class _HomePageState extends State<HomePage> {
         } else if (data is Map && data['data'] is List) {
           fetchedTransactions = data['data'];
         }
-        
+
         setState(() {
           transactions = fetchedTransactions;
           totalIncome = 0;
@@ -280,11 +283,12 @@ class _HomePageState extends State<HomePage> {
             }
           }
           //chuyển các key trong map thành list
-          final sortedDates = _groupedTransactions.keys.toList()..sort((a, b) { //so sánh a với b
-            final dateA = _parseFormattedDateString(a);
-            final dateB = _parseFormattedDateString(b);
-            return dateB.compareTo(dateA); //giảm dần
-          });
+          final sortedDates = _groupedTransactions.keys.toList()
+            ..sort((a, b) {
+              final dateA = _parseFormattedDateString(a);
+              final dateB = _parseFormattedDateString(b);
+              return dateB.compareTo(dateA); // ngày mới nhất trước
+            });
           //tạo biến lưu các giao dịch theo từng ngày
           final sortedGroupedTransactions = <String, List<dynamic>>{};
           //lưu tổng tiền chi tiêu, thu nhập... theo ngày
@@ -449,7 +453,7 @@ class _HomePageState extends State<HomePage> {
     });
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      
+
       if (data is Map && data.containsKey('amount') && data['amount'] != null) {
         return double.tryParse(data['amount'].toString()) ?? 0.0;
       }
@@ -515,6 +519,13 @@ class _HomePageState extends State<HomePage> {
     final now = DateTime.now(); //thời gian hiện tại của hthong
     const double blueHeaderHeight = 220.0; //chiều cao cố định
     const double overlapAmount = 20.0;
+    final sortedDates = _groupedTransactions.keys.toList()
+    ..sort((a, b) {
+      final dateA = _parseFormattedDateString(a);
+      final dateB = _parseFormattedDateString(b);
+      return dateB.compareTo(dateA); // ngày mới nhất trước
+    });
+
     final List<Widget> _pages = [
       Stack(
         children: [
@@ -552,8 +563,8 @@ class _HomePageState extends State<HomePage> {
                               const Icon(Icons.calendar_today, color: Colors.white, size: 18),
                               const SizedBox(width: 8),
                               Text(
-                                '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')} Số dư',
-                                style: const TextStyle(color: Colors.white, fontSize: 16)
+                                  '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')} Số dư',
+                                  style: const TextStyle(color: Colors.white, fontSize: 16)
                               ),
                               const Icon(Icons.arrow_drop_down, color: Colors.white),
                             ],
@@ -561,12 +572,11 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       PopupMenuButton<String>(
-                        onSelected: (value) {
+                        onSelected: (value) async {
                           if (value == 'logout') {
-                            auth_utils.logoutUser(context, widget.token, widget.idnguodung); // Corrected call
+                            auth_utils.logoutUser(context, widget.token, widget.idnguodung);
                           }
                         },
-                        //menu
                         itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
                           const PopupMenuItem<String>(
                             value: 'logout',
@@ -584,8 +594,7 @@ class _HomePageState extends State<HomePage> {
                   Row(
                     children: [
                       const Text('Chi tiêu: ', style: TextStyle(color: Colors.white70, fontSize: 16)),
-                      //$ dùng chèn giá trị biến/bthuc
-                      Text('${formatter.format(totalExpense + _monthlyExpense.toInt())}', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                      Text('${formatter.format(totalExpense)}', style: const TextStyle(color: Colors.white, fontSize: 16)),
                       const SizedBox(width: 16),
                       const Text('Thu nhập: ', style: TextStyle(color: Colors.white70, fontSize: 16)),
                       Text('+${formatter.format(totalIncome)}', style: const TextStyle(color: Colors.white, fontSize: 16)),
@@ -602,8 +611,8 @@ class _HomePageState extends State<HomePage> {
             left: 0,
             right: 0,
             child: GestureDetector(
-              onTap: () {
-                Navigator.push(
+              onTap: () async {
+                final result = await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => AddBudgetPage(
@@ -612,6 +621,11 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 );
+                if (result == true) {
+                  await _fetchBudget();
+                } else {
+                  _fetchBudget();
+                }
               },
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 0), // Changed from 20 to 0
@@ -628,31 +642,108 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Cài đặt ngân sách',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.symmetric(horizontal: 0.5),
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF64B5F6),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                    ),
+                    //giá trị map ko null, giá trị key ko null, ép kiểu kiểm tra >0
+                    if (_budgetData != null && _budgetData!['ngansach'] != null && (_budgetData!['ngansach'] as num) > 0)
+                      ...[ //trải toàn bộ ptu vào list hiện tại
+                        Builder(builder: (context) {
+                          final totalBudget = (_budgetData!['ngansach'] as num).toDouble();
+                          // Tính tổng chi tiêu phát sinh (không tính giao dịch hàng tháng)
+                          double spentAmount = 0;
+                          _groupedTransactions.forEach((date, transList) {
+                            for (var t in transList) {
+                              if (t['id_loai'].toString() == '2' && t['id_danhmuc'].toString() != '55') {
+                                spentAmount += (t['so_tien'] as num?)?.toDouble() ?? 0.0;
+                              }
+                            }
+                          });
+                          final remainingAmount = totalBudget - spentAmount;
+                          final progress = (totalBudget > 0) ? (spentAmount / totalBudget).clamp(0.0, 1.0) : 0.0;
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Ngân sách tháng', style: TextStyle(fontSize: 16, color: Colors.black54)),
+                                  Text(
+                                    'Còn lại: ${formatter.format(remainingAmount)} đ',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: remainingAmount < 0 ? Colors.redAccent : Colors.black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: const BorderRadius.all(Radius.circular(10)),
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 12,
+                                  backgroundColor: Colors.grey.shade300,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    progress >= 0.8 //80% đỏ
+                                        ? Colors.redAccent
+                                        : (progress >= 0.5 //50% cam
+                                            ? Colors.orangeAccent
+                                            : (progress >= 0.2 //20% xanh lá
+                                                ? Colors.green
+                                                : Colors.blue)), //dưới 20% xanh
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Đã chi: ${formatter.format(spentAmount)} đ',
+                                    style: const TextStyle(fontSize: 16, color: Colors.black, fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    '/ ${formatter.format(totalBudget)} đ',
+                                    style: const TextStyle(fontSize: 16, color: Colors.black, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                          );
+                        })
+                      ]
+                    else //nếu chưa có ngân sách thì hiển thị
+                      ...[
+                        const Center(
+                          child: Text(
+                            'Cài đặt ngân sách',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF64B5F6),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
+                      ],
                   ],
                 ),
               ),
             ),
           ),
-          
-          //danh sách thông tin giao dịch
+
+
+          //các giao dịch
           Positioned(
-            top: blueHeaderHeight + 22,
+            top: blueHeaderHeight + 60,
             left: 0,
             right: 0,
             bottom: 0,
@@ -698,7 +789,7 @@ class _HomePageState extends State<HomePage> {
                         //sử dụng toán tử spread (...) kết hợp với .map() để chèn nhiều widget (hoặc phần tử) vào danh sách
                         ..._groupedTransactions[date]!.map((t) {
                           final category = _allCategories.firstWhere(//tìm phần tử đầu tiên trong một danh sách
-                            (cat) {
+                                (cat) {
                               final int? categoryId = int.tryParse(cat['id_danhmuc']?.toString() ?? '');
                               final int? transactionCategoryId = int.tryParse(t['id_danhmuc']?.toString() ?? '');
                               return categoryId == transactionCategoryId;
@@ -715,8 +806,10 @@ class _HomePageState extends State<HomePage> {
                           final amountText = ((t['id_loai'].toString() == '1') ? '+' : '-') + formatter.format(amountValue);
                           final amountColor = (t['id_loai'].toString() == '1') ? Colors.blue : Colors.black;
 
+                          final isMonthlyAuto = t['id_danhmuc'].toString() == '55' && t['ghi_chu'] == 'Tự động trừ chi tiêu hàng tháng';
+
                           return GestureDetector(
-                            onTap: () async {
+                            onTap: isMonthlyAuto ? null : () async {
                               final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -731,14 +824,17 @@ class _HomePageState extends State<HomePage> {
                                 _loadData();
                               }
                             },
-                            child: _TransactionItem(
-                              icon: getFaIconDataFromUnicode(iconCode),
-                              iconColor: hexToColor(colorCode),
-                              title: categoryName,
-                              subtitle: t['ghi_chu'] ?? '',
-                              amount: amountText,
-                              amountColor: amountColor,
-                              transactionData: t,
+                            child: Opacity(
+                              opacity: isMonthlyAuto ? 0.6 : 1.0,
+                              child: _TransactionItem(
+                                icon: getFaIconDataFromUnicode(iconCode),
+                                iconColor: hexToColor(colorCode),
+                                title: categoryName,
+                                subtitle: t['ghi_chu'] ?? '',
+                                amount: amountText,
+                                amountColor: amountColor,
+                                transactionData: t,
+                              ),
                             ),
                           );
                         }).toList(),
@@ -752,117 +848,144 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      // back từ danh mục về home
       ManageCategoriesPage(
         token: widget.token,
         idnguodung: widget.idnguodung,
-        onBackButtonPressed: () {
+        onBackButtonPressed: (result) {
           setState(() {
-            _selectedIndex = 0; // Set index back to home page
+            _selectedIndex = 0;
           });
           _pageController.jumpToPage(0);
-          fetchMonthlyExpense(); // Tải lại chi tiêu hàng tháng khi quay về
+          if (result == true) {
+            _loadData();
+          }
         },
       ),
-      // back từ biểu đồ về home
       ChartPage(
-        key: _chartPageKey,//truyền một key định danh widget
-        token: widget.token, //truyền token
-        idnguoidung: widget.idnguodung, //truyền id người dùng
-        onBack: () => _pageController.jumpToPage(0), //callback về home
+        key: _chartPageKey,
+        token: widget.token,
+        idnguoidung: widget.idnguodung,
+        onBack: () => _pageController.jumpToPage(0),
       ),
-
     ];
+
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : PageView( // Use PageView for page switching
-              controller: _pageController,
-              onPageChanged: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              children: _pages,
-            ),
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        children: _pages,
+      ),
       bottomNavigationBar: _selectedIndex == 0
           ? ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20.0)), // Bo tròn góc trên
-              child: BottomAppBar(
-                shape: const CircularNotchedRectangle(), // Giữ hình dạng khuyết
-                clipBehavior: Clip.antiAlias,
-                color: Colors.white,
-                notchMargin: 6.0, // Điều chỉnh khoảng cách của nút nổi
-                elevation: 2.0, // Độ đổ bóng cho thanh điều hướng
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start, // Nhóm các biểu tượng về bên trái
-                  children: <Widget>[
-                    IconButton(
-                      icon: const Icon(Icons.receipt_long),
-                      color: _selectedIndex == 0 ? Colors.blue : Colors.grey,
-                      onPressed: () {
-                        setState(() {
-                          _selectedIndex = 0;
-                        });
-                        _pageController.jumpToPage(0);
-                        _loadData();
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.grid_view),
-                      color: _selectedIndex == 1 ? Colors.blue : Colors.grey,
-                      onPressed: () {
-                        setState(() {
-                          _selectedIndex = 1;
-                        });
-                        _pageController.jumpToPage(1);
-                      },
-                    ),
-                    IconButton( //click vào icon biểu đồ để chuyển trang
-                      icon: const Icon(Icons.pie_chart),
-                      //nếu index==2 thì trả màu xanh dương ko thì màu xanh lá
-                      color: _selectedIndex == 2 ? Colors.blue : Colors.grey,
-                      onPressed: () {//xử lý nhấn vào icon
-                        setState(() { //cập nhật trang thái của index = 2
-                          _selectedIndex = 2;
-                        });
-                        _pageController.jumpToPage(2);//điểu khiển trang nhảy sang số 2
-                      },
-                    ),
-                    const Spacer(), // Đẩy khoảng trống và nút về bên phải
-                    const SizedBox(width: 40), // Khoảng trống cho FloatingActionButton
-                  ],
-                ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20.0)), // Bo tròn góc trên
+        child: BottomAppBar(
+          shape: const CircularNotchedRectangle(), // Giữ hình dạng khuyết
+          clipBehavior: Clip.antiAlias,
+          color: Colors.white,
+          notchMargin: 6.0, // Điều chỉnh khoảng cách của nút nổi
+          elevation: 2.0, // Độ đổ bóng cho thanh điều hướng
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start, // Nhóm các biểu tượng về bên trái
+            children: <Widget>[
+              IconButton(
+                icon: const Icon(Icons.receipt_long),
+                color: _selectedIndex == 0 ? Colors.blue : Colors.grey,
+                onPressed: () {
+                  setState(() {
+                    _selectedIndex = 0;
+                  });
+                  _pageController.jumpToPage(0);
+                  _loadData();
+                },
               ),
-            )
+              IconButton(
+                icon: const Icon(Icons.grid_view),
+                color: _selectedIndex == 1 ? Colors.blue : Colors.grey,
+                onPressed: () {
+                  setState(() {
+                    _selectedIndex = 1;
+                  });
+                  _pageController.jumpToPage(1);
+                },
+              ),
+              IconButton( //click vào icon biểu đồ để chuyển trang
+                icon: const Icon(Icons.pie_chart),
+                //nếu index==2 thì trả màu xanh dương ko thì màu xanh lá
+                color: _selectedIndex == 2 ? Colors.blue : Colors.grey,
+                onPressed: () {//xử lý nhấn vào icon
+                  setState(() { //cập nhật trang thái của index = 2
+                    _selectedIndex = 2;
+                  });
+                  _pageController.jumpToPage(2);//điểu khiển trang nhảy sang số 2
+                },
+              ),
+              const Spacer(), // Đẩy khoảng trống và nút về bên phải
+              const SizedBox(width: 40), // Khoảng trống cho FloatingActionButton
+            ],
+          ),
+        ),
+      )
           : null,
       floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton(
-              onPressed: () async {
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AddTransactionPage(
-                      token: widget.token,
-                      idnguodung: widget.idnguodung,
-                    ),
-                  ),
-                );
-                //load biểu đồ khi thêm mới giao dịch
-                if (result == true) { //nếu kết quả là true
-                  _loadData();//load dữ liệu
-                  //nếu chartpage được hiển thị thì current sẽ chứa chartPState và load lại dữ liệu còn ko thì trả về null
-                  _chartPageKey.currentState?.reloadData();
-                  //biến globalkey
+        onPressed: () async {
+          // Lấy ngân sách và tổng chi tiêu hiện tại
+          double totalBudget = (_budgetData != null && _budgetData!['ngansach'] != null)
+              ? (_budgetData!['ngansach'] as num).toDouble()
+              : 0.0;
+          double totalExpenseValue = totalExpense.toDouble();
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AddTransactionPage(
+                token: widget.token,
+                idnguodung: widget.idnguodung,
+              ),
+              settings: RouteSettings(
+                arguments: {
+                  'totalBudget': totalBudget,
+                  'totalExpense': totalExpenseValue,
+                },
+              ),
+            ),
+          );
+          if (result is Map && result['shouldNotify'] == true) {
+            double oldPercent = result['oldPercent'] ?? 0;
+            double newPercent = result['newPercent'] ?? 0;
+            double soTienGiaoDichMoi = 0;
+            if (result['newPercent'] != null && result['oldPercent'] != null && totalBudget > 0) {
+              soTienGiaoDichMoi = ((newPercent - oldPercent) * totalBudget) / 100;
+            }
+            // Tính lại số tiền còn lại sau khi thêm giao dịch (cộng thêm số tiền vừa thêm)
+            double spentAmount = 0;
+            _groupedTransactions.forEach((date, transList) {
+              for (var t in transList) {
+                if (t['id_loai'].toString() == '2' && t['id_danhmuc'].toString() != '55') {
+                  spentAmount += (t['so_tien'] as num?)?.toDouble() ?? 0.0;
                 }
-              },
-              backgroundColor: const Color(0xFF2196F3),
-              elevation: 8.0,
-              shape: const CircleBorder(), // nút thêm hình tròn
-              child: const Icon(Icons.add, size: 32, color: Colors.white),
-            )
+              }
+            });
+            spentAmount += soTienGiaoDichMoi;
+            double remainingAmount = totalBudget - spentAmount;
+            checkAndNotifyBudget(oldPercent, newPercent, remainingAmount: remainingAmount);
+            _loadData();
+          } else if (result == true) {
+            _loadData();
+          }
+        },
+        backgroundColor: const Color(0xFF2196F3),
+        elevation: 8.0,
+        shape: const CircleBorder(), // nút thêm hình tròn
+        child: const Icon(Icons.add, size: 32, color: Colors.white),
+      )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked, // Đặt nút ở ngoài cùng bên phải
     );
@@ -894,9 +1017,9 @@ class _HomePageState extends State<HomePage> {
   //hàm chuyển chuỗi ngày dạng DD thg MM, YYYY thành DateTime
   //Để sắp xếp đúng theo thứ tự thời gian , phải chuyển các chuỗi này ngược lại thành đối tượng DateTime để so sánh.
   DateTime _parseFormattedDateString(String formattedDateString) {
-    final parts = formattedDateString.split(' '); //tách thành "DD", "thg", "MM," , "YYYY"
+    final parts = formattedDateString.split(' '); //tách thành "DD", "thg", "MM,", "YYYY"
     final day = int.parse(parts[0]);
-    final month = int.parse(parts[2]); // "thg" là index 1
+    final month = int.parse(parts[2].replaceAll(',', '')); // Loại bỏ dấu phẩy nếu có
     final year = int.parse(parts[3]);
     return DateTime(year, month, day);
   }
@@ -926,7 +1049,7 @@ class _HomePageState extends State<HomePage> {
     //tạo một định dạng số có dấu phân cách hàng nghìn theo chuẩn Việt Nam
     final formatter = NumberFormat('#,###', 'vi_VN');
     // Balance = Total Income (ad-hoc) - Monthly Expense - Ad-hoc Expense
-    final soDuHienTai = totalIncome - (totalExpense + _monthlyExpense);
+    final soDuHienTai = totalIncome - totalExpense;
 
     return Text(
       formatter.format(soDuHienTai.toInt()),
@@ -938,38 +1061,165 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // void _navigateToUpdateTransaction(dynamic transactionData) async {
-  //   final result = await Navigator.push(
-  //     context,
-  //     MaterialPageRoute(
-  //       builder: (context) => UpdateTransactionPage(
-  //         token: widget.token,
-  //         idnguodung: widget.idnguodung,
-  //         transactionData: transactionData,
-  //       ),
-  //     ),
-  //   );
-  //
-  //   if (result == true) {
-  //     _loadData();
-  //   }
-  // }
+// void _navigateToUpdateTransaction(dynamic transactionData) async {
+//   final result = await Navigator.push(
+//     context,
+//     MaterialPageRoute(
+//       builder: (context) => UpdateTransactionPage(
+//         token: widget.token,
+//         idnguodung: widget.idnguodung,
+//         transactionData: transactionData,
+//       ),
+//     ),
+//   );
+//
+//   if (result == true) {
+//     _loadData();
+//   }
+// }
 
-  // String _getCategoryName(int? categoryId) {
-  //   if (categoryId == null) {
-  //     return 'Không rõ';
-  //   }
-  //   try {
-  //     final category = _allCategories.firstWhere(
-  //       (cat) => (cat['id_danhmuc'] as int?) == categoryId,
-  //     );
-  //     return category['ten_danh_muc'] as String? ?? 'Không rõ';
-  //   } catch (e) {
-  //     return 'Không rõ';
-  //   }
-  // }
+// String _getCategoryName(int? categoryId) {
+//   if (categoryId == null) {
+//     return 'Không rõ';
+//   }
+//   try {
+//     final category = _allCategories.firstWhere(
+//       (cat) => (cat['id_danhmuc'] as int?) == categoryId,
+//     );
+//     return category['ten_danh_muc'] as String? ?? 'Không rõ';
+//   } catch (e) {
+//     return 'Không rõ';
+//   }
+// }
+//==========NGÂN SÁCH====//
+Future<void> _fetchBudget() async {
+    final now = DateTime.now();
+    final url = Uri.parse(
+        'http://10.0.2.2:8081/QuanLyChiTieu/api/budget/user/${widget.idnguodung}/month/${now.month}/year/${now.year}');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      );
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final data = jsonDecode(responseBody);
+        if (mounted) {
+          setState(() {
+            _budgetData = data;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _budgetData = null;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching budget in home_page: $e');
+      if (mounted) {
+        setState(() {
+          _budgetData = null;
+        });
+      }
+    }
+  }
 
-  
+  //hàm kiem tra và thông báo
+  void checkAndNotifyBudget(double oldPercent, double newPercent, {double? remainingAmount}) {
+    // Gửi thông báo mỗi khi có sự biến đổi ngân sách
+    if (remainingAmount != null) {
+      NotificationService().showNotification(
+        1,
+        "Ngân sách đã thay đổi!",
+        "Số tiền còn lại: ${NumberFormat('#,###', 'vi_VN').format(remainingAmount)} đ",
+      );
+
+    }
+    // Nếu vẫn muốn giữ logic cũ thì có thể giữ lại các mốc dưới đây:
+    //old <20<=new
+    if (oldPercent < 20 && newPercent >= 20) {
+      NotificationService().showNotification(2, "Bạn đã chi tiêu 20% ngân sách!", "Bạn đã chi tiêu 20% ngân sách!");
+    }//old<50<=50
+    if (oldPercent < 50 && newPercent >= 50) {
+      NotificationService().showNotification(3, "Bạn đã chi tiêu 50% ngân sách!", "Bạn đã chi tiêu 50% ngân sách!");
+    }//old<80<=80
+    if (oldPercent < 80 && newPercent >= 80) {
+      NotificationService().showNotification(4, "Ngân sách sắp cạn! Bạn đã chi tiêu 80% ngân sách!", "Ngân sách sắp cạn! Bạn đã chi tiêu 80% ngân sách!");
+    }//old<100<=100
+    if (oldPercent < 100 && newPercent >= 100) {
+      NotificationService().showNotification(5, "Bạn đã dùng hết ngân sách!", "Bạn đã dùng hết ngân sách tháng này!");
+    }
+  }
+
+
+  //----------XỬ LÝ TỰ ĐỘNG THÊM GIAO DỊCH CHI PHÍ HÀNG THÁNG VÀO ĐÀU THÁNG-----------//
+  //hàm tự động trừ chi phí hàng tháng vào đầu mỗi tháng
+  Future<void> _autoDeductMonthlyExpense() async {
+    final now = DateTime.now();//thơi gian hiện tại
+    final userId = int.tryParse(widget.idnguodung.toString());
+    if (userId == null) return;
+
+    // Ngày 1 của tháng hiện tại
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+
+    // Lấy danh sách giao dịch tháng này
+    final transactions = await fetchTransactionsByMonth(userId, now.month, now.year);
+    // Tìm trong danh sách giao dịch xem đã có giao dịch chi tiêu hang tháng chưa
+    final autoTransaction = transactions.firstWhere(
+      (t) => t['id_danhmuc']?.toString() == '55' && t['ghi_chu'] == 'Tự động trừ chi tiêu hàng tháng',
+      orElse: () => null,
+    );
+
+    final amount = await fetchTongChiTieuHangThang(userId, now.month, now.year); //tổng chi hàng tháng
+    if (amount > 0) {
+      //nếu đã có giao dịch tự động thêm
+      if (autoTransaction != null) {
+        // Đã có giao dịch tự động, cập nhật số tiền nếu khác
+        if ((autoTransaction['so_tien'] as num?)?.toDouble() != amount) {
+          await _updateMonthlyExpenseTransaction(autoTransaction['id_giaodich'], amount);
+        }
+      } else {
+        // Chưa có, tạo mới
+        await _createMonthlyExpenseTransaction(userId, amount, firstDayOfMonth);
+      }
+    }
+  }
+
+  //cập nhật chi tiêu hàng tháng
+  Future<void> _updateMonthlyExpenseTransaction(dynamic transactionId, double amount) async {
+    final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transactions/$transactionId');
+    final body = jsonEncode({
+      'so_tien': amount,
+    });
+    final response = await http.put(url, headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ${widget.token}',
+    }, body: body);
+    print('Update response: ${response.statusCode} - ${response.body}');
+  }
+//tạo chi tiêu hàng tháng
+  Future<void> _createMonthlyExpenseTransaction(int userId, double amount, DateTime date) async {
+    // Gọi API tạo giao dịch mới
+    final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transactions');
+    final body = jsonEncode({
+      'id_nguoidung': userId,
+      'id_danhmuc': 55, // ID danh mục mặc định cho chi tiêu hàng tháng
+      'id_loai': 2, // 2 = chi tiêu
+      'id_tennhom': 1, // <-- BẮT BUỘC PHẢI LÀ 1 (hàng tháng)
+      'so_tien': amount,
+      'ngay': DateFormat('dd/MM/yyyy').format(date),
+      'ghi_chu': 'Tự động trừ chi tiêu hàng tháng',
+    });
+    await http.post(url, headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ${widget.token}',
+    }, body: body);
+  }
 }
 
 class _TransactionItem extends StatelessWidget {
