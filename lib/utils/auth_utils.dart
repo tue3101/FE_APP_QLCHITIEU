@@ -54,4 +54,17 @@ Future<void> logoutUser(BuildContext context, String token, dynamic idnguodung) 
       (Route<dynamic> route) => false,
     );
   }
+}
+
+Future<Map<String, dynamic>?> getAuthData() async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('token');
+  final idnguodung = prefs.get('idnguodung');
+  if (token != null && idnguodung != null) {
+    return {
+      'token': token,
+      'idnguodung': idnguodung,
+    };
+  }
+  return null;
 } 

@@ -4,8 +4,11 @@ import 'dart:convert';
 import 'home_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().init();
   runApp(const MyApp());
 }
 
@@ -206,7 +209,7 @@ class _RegisterPageState extends State<RegisterPage> {
       isLoading = false;
     });
     if (response.statusCode >= 200 && response.statusCode < 300) {
-    
+
       Navigator.pop(context);
     } else {
       String errorMsg = 'Đăng ký thất bại!';

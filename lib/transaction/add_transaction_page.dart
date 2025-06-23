@@ -554,14 +554,38 @@ class _AddTransactionPageState extends State<AddTransactionPage> with TickerProv
       return;
     }
 
+    // --- LẤY NGÂN SÁCH VÀ TỔNG CHI TIÊU HIỆN TẠI (nếu truyền vào từ HomePage) ---
+    double oldPercent = 0; //phần trăm cũ
+    double newPercent = 0; //phần trăm mới
+    double soTienGiaoDichMoi = double.parse(_displayValue); //số tiền người dùng nhập vào
+    double totalBudget = 0; //tổng ngân sách
+    double totalExpense = 0; //tổng chi
+    //ModalRoute.of(context):– Lấy route hiện tại (trang hiện tại đang hiển thị).
+    //.settings.arguments:– Lấy ra dữ liệu truyền từ trang trước sang (qua Navigator.push hoặc pushNamed).
+    //kiểm tra dữ liệu truyền sang hay ko và dữ liệu có phải 1 map ko
+    if (ModalRoute.of(context)?.settings.arguments != null && ModalRoute.of(context)!.settings.arguments is Map) {
+      final args = ModalRoute.of(context)!.settings.arguments as Map;
+      if (args['totalBudget'] != null && args['totalExpense'] != null) {
+        totalBudget = (args['totalBudget'] as num).toDouble();
+        totalExpense = (args['totalExpense'] as num).toDouble();
+        if (totalBudget > 0) {
+          oldPercent = (totalExpense / totalBudget) * 100;
+          newPercent = ((totalExpense + soTienGiaoDichMoi) / totalBudget) * 100;
+        }
+      }
+    }
+
     final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/transactions');
+    final isIncome = _selectedCategory!['id_loai'] == 1;
     final body = jsonEncode({
-      'so_tien': double.parse(_displayValue),
+      'so_tien': soTienGiaoDichMoi,
       'ghi_chu': noteController.text,
       'ngay': DateFormat('dd/MM/yyyy').format(_selectedDate),
       'id_danhmuc': _selectedCategory!['id_danhmuc'],
       'id_loai': _selectedCategory!['id_loai'],
       'id_nguoidung': widget.idnguodung,
+      'id_tennhom': isIncome ? null : 2, // Thu nhập thì null, chi tiêu thì phát sinh = 2
+      'phat_sinh': isIncome ? 2 : null, // Thu nhập thì phát_sinh = 2
     });
 
     try {
@@ -575,12 +599,17 @@ class _AddTransactionPageState extends State<AddTransactionPage> with TickerProv
       );
 
       if (response.statusCode == 201) {
+        // Gửi thông báo nếu vượt mốc
+        if (totalBudget > 0) {
+          // ignore: use_build_context_synchronously
+          Navigator.of(context).pop({'shouldNotify': true, 'oldPercent': oldPercent, 'newPercent': newPercent});
+        } else {
+          // ignore: use_build_context_synchronously
+          Navigator.of(context).pop(true);
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Thêm giao dịch thành công!')),
         );
-        if (mounted) {
-          Navigator.pop(context, true);
-        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Thêm giao dịch thất bại: ${response.statusCode}')),

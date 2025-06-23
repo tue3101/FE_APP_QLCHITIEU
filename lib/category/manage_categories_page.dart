@@ -10,7 +10,7 @@ import 'update_category_page.dart'; // Import the update page
 class ManageCategoriesPage extends StatefulWidget {
   final String token;
   final dynamic idnguodung;
-  final VoidCallback? onBackButtonPressed;
+  final Function(dynamic)? onBackButtonPressed;
 
   const ManageCategoriesPage({
     super.key,
@@ -507,7 +507,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
             if (widget.onBackButtonPressed != null) {
-              widget.onBackButtonPressed!();
+              widget.onBackButtonPressed!(null);
             } else {
               Navigator.pop(context);
             }
@@ -837,9 +837,13 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
                     builder: (context) => UpdateAmountDialog(),
                   );
                   if (newAmount != null) {
-                    //gọi hàm cập nhật số tiền hàng tháng sau khi người dùng đã nhập số mới trong dialog
-                    await updateMonthlyAmount(context, newAmount);
-                    setState(() {}); // reload lại dữ liệu
+                    final result = await updateMonthlyAmount(context, newAmount);
+                    if (result) {
+                      // Đóng dialog, hiển thị SnackBar thành công tại trang này
+                      setState(() {}); // reload lại widget để cập nhật số tiền mới
+                    } else {
+                      setState(() {}); // reload lại dữ liệu nếu thất bại
+                    }
                   }
                 },
                 child: const Text('Cập nhật số tiền'),
@@ -851,7 +855,7 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
     );
   }
 
-  Future<void> updateMonthlyAmount(BuildContext context, int amount) async {
+  Future<bool> updateMonthlyAmount(BuildContext context, int amount) async {
     final now = DateTime.now();
     final url = Uri.parse(
       'http://10.0.2.2:8081/QuanLyChiTieu/api/chi-tieu-hang-thang/user/${widget.idnguodung}/month/${now.month}/year/${now.year}/amount'
@@ -864,16 +868,16 @@ class _ManageCategoriesPageState extends State<ManageCategoriesPage>
       },
       body: jsonEncode({'amount': amount}),
     );
-    // print('Status: ${response.statusCode}');
-    // print('Body: ${response.body}');
     if (response.statusCode == 200) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cập nhật thành công!')),
       );
+      return true;
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cập nhật thất bại: ${response.body}')),
+        SnackBar(content: Text('Cập nhật thất bại:  ${response.body}')),
       );
+      return false;
     }
   }
 }
