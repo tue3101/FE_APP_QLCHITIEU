@@ -127,18 +127,18 @@ class ChartPageState extends State<ChartPage> {
       // Fetch all data in parallel
       final results = await Future.wait([
         //gọi khoảng chi tiêu cố định theo tháng
-        _fetchMonthlyExpenses(userId, months),
+        // _fetchMonthlyExpenses(userId, months),
         //lấy khoảng chi tiêu phát sinh
         _fetchVariableTransactions(userId, months),
       ]);
 
       //tổng chi tiêu hàng tháng
-      final totalMonthlyExpense = results[0] as double; //chuyển về kiểu double
+      // final totalMonthlyExpense = results[0] as double; // ĐÃ ĐÓNG COMMAND
       //chi tiêu phát sinh
-      final variableTransactions = results[1] as List<dynamic>; //chuyển về danh sách kiểu dynamic
+      final variableTransactions = results[0] as List<dynamic>; // ĐÃ ĐÓNG COMMAND: đổi index từ 1 -> 0
 
       //gọi hàm xử lý giá trị đầu vào và chuẩn bị hiển thị biểu đồ
-      _processChartData(totalMonthlyExpense, variableTransactions, months);
+      _processChartData(/*totalMonthlyExpense,*/ 0.0, variableTransactions, months); // ĐÃ ĐÓNG COMMAND: truyền 0.0 thay vì totalMonthlyExpense
 
     } catch (e) {
       print('Lỗi khi tải dữ liệu biểu đồ: $e');
@@ -174,18 +174,18 @@ class ChartPageState extends State<ChartPage> {
   }
 
   //hàm lấy về dữ liệu chi tiêu hàng tháng
-  Future<double> _fetchMonthlyExpenses(int userId, List<DateTime> months) async {
-    double total = 0.0; //khởi tạo = 0.0
-    final futures = months.map((month) => //dùng biến months chứa giá trị tháng mà người dùng chọn
-      _fetchTongChiTieuHangThang(userId, month.month, month.year)
-    ).toList();
-
-    final results = await Future.wait(futures);
-    for (var expense in results) {
-      total += expense;
-    }
-    return total;
-  }
+  // Future<double> _fetchMonthlyExpenses(int userId, List<DateTime> months) async {
+  //   double total = 0.0; //khởi tạo = 0.0
+  //   final futures = months.map((month) => //dùng biến months chứa giá trị tháng mà người dùng chọn
+  //     _fetchTongChiTieuHangThang(userId, month.month, month.year)
+  //   ).toList();
+  //
+  //   final results = await Future.wait(futures);
+  //   for (var expense in results) {
+  //     total += expense;
+  //   }
+  //   return total;
+  // }
 
 
   //hàm lấy dữ liệu chi tiêu phát sinh
@@ -300,22 +300,23 @@ class ChartPageState extends State<ChartPage> {
     
     // --- XỬ LÝ DỮ LIỆU CHI TIÊU ---
     //tổng tất cả chi tiêu
-    final grandTotalExpense = monthlyExpense + variableExpenseTotal;
+    // final grandTotalExpense = monthlyExpense + variableExpenseTotal; // ĐÃ ĐÓNG COMMAND
+    final grandTotalExpense = variableExpenseTotal; // Chỉ lấy chi tiêu phát sinh
     //danh sách chi tiết chi tiêu
     final expenseDetailsList = expenseCategoryDetails.values.toList(); //.value -> lấy tất cả giá trị
 
     //mục đích là chỉ khi có chi tiêu cố định mơi thêm mục chi tiêu cố định hàng tháng vào ds thong ke
     //kiểm tra người dùng có phát sinh chi tiêu cố định ko
-    if (monthlyExpense > 0) { //chi tiêu hàng tháng lớn hơn 0
-      //chèn moot mục vào đầu danh sách
-      expenseDetailsList.insert(0, {//chèn vào vị trí đầu tiên
-        'name': 'Chi tiêu cố định hàng tháng',
-        'amount': monthlyExpense,
-        'color': '808080',
-        'icon': 'e584',
-        'count': months.length, //Gán giá trị cho key 'count' bằng số lượng tháng trong danh sách months.
-      });
-    }
+    // if (monthlyExpense > 0) { //chi tiêu hàng tháng lớn hơn 0
+    //   //chèn moot mục vào đầu danh sách
+    //   expenseDetailsList.insert(0, {//chèn vào vị trí đầu tiên
+    //     'name': 'Chi tiêu cố định hàng tháng',
+    //     'amount': monthlyExpense,
+    //     'color': '808080',
+    //     'icon': 'e584',
+    //     'count': months.length, //Gán giá trị cho key 'count' bằng số lượng tháng trong danh sách months.
+    //   });
+    // }
 
     // --- XỬ LÝ DỮ LIỆU THU NHẬP ---
     final incomeDetailsList = incomeCategoryDetails.values.toList(); //lấy tất cả giá trị trong map thu nhập
@@ -819,15 +820,15 @@ class ChartPageState extends State<ChartPage> {
   }
 
   Future<double> _fetchTongChiTieuHangThang(int userId, int month, int year) async {
-    final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/chi-tieu-hang-thang/user/$userId/month/$month/year/$year');
-    final response = await http.get(url, headers: _authHeaders());
-    if (await _handleApiResponse(response)) {
-      final data = jsonDecode(response.body);
-      if (data is Map && data.containsKey('amount') && data['amount'] != null) {
-        return double.tryParse(data['amount'].toString()) ?? 0.0;
-      }
-    }
-    return 0.0;
+    // final url = Uri.parse('http://10.0.2.2:8081/QuanLyChiTieu/api/chi-tieu-hang-thang/user/$userId/month/$month/year/$year');
+    // final response = await http.get(url, headers: _authHeaders());
+    // if (await _handleApiResponse(response)) {
+    //   final data = jsonDecode(response.body);
+    //   if (data is Map && data.containsKey('amount') && data['amount'] != null) {
+    //     return double.tryParse(data['amount'].toString()) ?? 0.0;
+    //   }
+    // }
+    return 0.0; // ĐÃ ĐÓNG COMMAND: luôn trả về 0
   }
   
   Map<String, String> _authHeaders() {

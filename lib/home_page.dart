@@ -12,6 +12,8 @@ import 'category/manage_categories_page.dart';
 import 'package:intl/intl.dart';
 import 'chart/chart_page.dart';
 import 'services/notification_service.dart';
+import '../sample_expense_list/list_page.dart';
+import 'package:user_app_qlchitieu/services/export_service.dart';
 
 class HomePage extends StatefulWidget {
   final String token;
@@ -48,6 +50,9 @@ class _HomePageState extends State<HomePage> {
   //tạo globalkey truy cập tới chartpage và trạng thái state
   final GlobalKey<ChartPageState> _chartPageKey = GlobalKey<ChartPageState>();
 
+  // Thêm GlobalKey cho SampleExpenseListPage để gọi hàm reload
+  final GlobalKey<SampleExpenseListPageState> _sampleExpenseListPageKey = GlobalKey<SampleExpenseListPageState>();
+
   @override
   void initState() {
     super.initState();
@@ -63,9 +68,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadData() async {
-    setState(() { isLoading = true; });
-    print('Loading data for month: ${_selectedDate.month}/${_selectedDate.year}');
     try {
+      setState(() { isLoading = true; });
+      print('Loading data for month: ${_selectedDate.month}/${_selectedDate.year}');
       await Future.wait([
         fetchTransactionsForMonth(),
         _fetchDefaultCategories(),
@@ -83,8 +88,9 @@ class _HomePageState extends State<HomePage> {
         isLoading = false;
       });
       print('Data loading complete.');
-    } catch (e) {
-      print('Error loading data: $e');
+    } catch (e, stack) {
+      print('[ERROR] Lỗi khi load data: $e');
+      print(stack);
       setState(() { isLoading = false; }); // Ensure loading indicator is dismissed even on error
     }
   }
@@ -605,243 +611,240 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // Cài đặt ngân sách
+          // Phần còn lại: ngân sách, export, danh sách giao dịch
           Positioned(
             top: blueHeaderHeight - overlapAmount,
             left: 0,
             right: 0,
-            child: GestureDetector(
-              onTap: () async {
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AddBudgetPage(
-                      token: widget.token,
-                      idnguodung: widget.idnguodung,
+            bottom: 0,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Ngân sách
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 0),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ),
-                );
-                if (result == true) {
-                  await _fetchBudget();
-                } else {
-                  _fetchBudget();
-                }
-              },
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 0), // Changed from 20 to 0
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    //giá trị map ko null, giá trị key ko null, ép kiểu kiểm tra >0
-                    if (_budgetData != null && _budgetData!['ngansach'] != null && (_budgetData!['ngansach'] as num) > 0)
-                      ...[ //trải toàn bộ ptu vào list hiện tại
-                        Builder(builder: (context) {
-                          final totalBudget = (_budgetData!['ngansach'] as num).toDouble();
-                          // Tính tổng chi tiêu phát sinh (không tính giao dịch hàng tháng)
-                          double spentAmount = 0;
-                          _groupedTransactions.forEach((date, transList) {
-                            for (var t in transList) {
-                              if (t['id_loai'].toString() == '2' && t['id_danhmuc'].toString() != '55') {
-                                spentAmount += (t['so_tien'] as num?)?.toDouble() ?? 0.0;
-                              }
-                            }
-                          });
-                          final remainingAmount = totalBudget - spentAmount;
-                          final progress = (totalBudget > 0) ? (spentAmount / totalBudget).clamp(0.0, 1.0) : 0.0;
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        //giá trị map ko null, giá trị key ko null, ép kiểu kiểm tra >0
+                        if (_budgetData != null && _budgetData!['ngansach'] != null && (_budgetData!['ngansach'] as num) > 0)
+                          ...[ //trải toàn bộ ptu vào list hiện tại
+                            Builder(builder: (context) {
+                              final totalBudget = (_budgetData!['ngansach'] as num).toDouble();
+                              double spentAmount = 0;
+                              _groupedTransactions.forEach((date, transList) {
+                                for (var t in transList) {
+                                  if (t['id_loai'].toString() == '2' && t['id_danhmuc'].toString() != '55') {
+                                    spentAmount += (t['so_tien'] as num?)?.toDouble() ?? 0.0;
+                                  }
+                                }
+                              });
+                              final remainingAmount = totalBudget - spentAmount;
+                              final progress = (totalBudget > 0) ? (spentAmount / totalBudget).clamp(0.0, 1.0) : 0.0;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Ngân sách tháng', style: TextStyle(fontSize: 16, color: Colors.black54)),
-                                  Text(
-                                    'Còn lại: ${formatter.format(remainingAmount)} đ',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: remainingAmount < 0 ? Colors.redAccent : Colors.black,
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Ngân sách tháng', style: TextStyle(fontSize: 16, color: Colors.black54)),
+                                      Text(
+                                        'Còn lại: ${formatter.format(remainingAmount)} đ',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: remainingAmount < 0 ? Colors.redAccent : Colors.black,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ClipRRect(
+                                    borderRadius: const BorderRadius.all(Radius.circular(10)),
+                                    child: LinearProgressIndicator(
+                                      value: progress,
+                                      minHeight: 12,
+                                      backgroundColor: Colors.grey.shade300,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        progress >= 0.8
+                                            ? Colors.redAccent
+                                            : (progress >= 0.5
+                                                ? Colors.orangeAccent
+                                                : (progress >= 0.2
+                                                    ? Colors.green
+                                                    : Colors.blue)),
+                                      ),
                                     ),
                                   ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Đã chi: ${formatter.format(spentAmount)} đ',
+                                        style: const TextStyle(fontSize: 16, color: Colors.black, fontWeight: FontWeight.bold),
+                                      ),
+                                      Text(
+                                        '/ ${formatter.format(totalBudget)} đ',
+                                        style: const TextStyle(fontSize: 16, color: Colors.black, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
                                 ],
-                              ),
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: const BorderRadius.all(Radius.circular(10)),
-                                child: LinearProgressIndicator(
-                                  value: progress,
-                                  minHeight: 12,
-                                  backgroundColor: Colors.grey.shade300,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    progress >= 0.8 //80% đỏ
-                                        ? Colors.redAccent
-                                        : (progress >= 0.5 //50% cam
-                                            ? Colors.orangeAccent
-                                            : (progress >= 0.2 //20% xanh lá
-                                                ? Colors.green
-                                                : Colors.blue)), //dưới 20% xanh
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Đã chi: ${formatter.format(spentAmount)} đ',
-                                    style: const TextStyle(fontSize: 16, color: Colors.black, fontWeight: FontWeight.bold),
-                                  ),
-                                  Text(
-                                    '/ ${formatter.format(totalBudget)} đ',
-                                    style: const TextStyle(fontSize: 16, color: Colors.black, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                            ],
-                          );
-                        })
-                      ]
-                    else //nếu chưa có ngân sách thì hiển thị
-                      ...[
-                        const Center(
-                          child: Text(
-                            'Cài đặt ngân sách',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.symmetric(horizontal: 0.5),
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF64B5F6),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                        ),
-                      ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-
-          //các giao dịch
-          Positioned(
-            top: blueHeaderHeight + 60,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  //sử dụng toán tử spread (...) kết hợp với .map() để chèn nhiều widget (hoặc phần tử) vào danh sách
-                  ..._groupedTransactions.keys.map((date) {
-                    final dailyIncome = _dailyTotals[date]!['income']!;
-                    final dailyExpense = _dailyTotals[date]!['expense']!;
-
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(date, style: const TextStyle(fontSize: 14, color: Colors.black54)),
-                              ),
-                              const Spacer(),
-                              Expanded(
-                                child: Text('Chi tiêu:${formatter.format(dailyExpense)}', style: const TextStyle(fontSize: 14, color: Colors.black54)),
-                              ),
-                              const SizedBox(width: 8),
-                              Text('Thu nhập:+${formatter.format(dailyIncome)}', style: const TextStyle(fontSize: 14, color: Colors.blue)),
-                            ],
-                          ),
-                        ),
-                        //sử dụng toán tử spread (...) kết hợp với .map() để chèn nhiều widget (hoặc phần tử) vào danh sách
-                        ..._groupedTransactions[date]!.map((t) {
-                          final category = _allCategories.firstWhere(//tìm phần tử đầu tiên trong một danh sách
-                                (cat) {
-                              final int? categoryId = int.tryParse(cat['id_danhmuc']?.toString() ?? '');
-                              final int? transactionCategoryId = int.tryParse(t['id_danhmuc']?.toString() ?? '');
-                              return categoryId == transactionCategoryId;
-                            },
-                            orElse: () => {},
-                          );
-
-                          final iconCode = category?['ma_icon'] ?? 'f555';
-                          final colorCode = category?['ma_mau'] ?? '#2196F3';
-                          final categoryName = category?['ten_danh_muc'] ?? 'Không rõ';
-
-                          double amountValue = (t['so_tien'] as num?)?.toDouble() ?? 0.0;
-                          //formatter.format(...)	Định dạng tiền có dấu phân cách, đơn vị
-                          final amountText = ((t['id_loai'].toString() == '1') ? '+' : '-') + formatter.format(amountValue);
-                          final amountColor = (t['id_loai'].toString() == '1') ? Colors.blue : Colors.black;
-
-                          final isMonthlyAuto = t['id_danhmuc'].toString() == '55' && t['ghi_chu'] == 'Tự động trừ chi tiêu hàng tháng';
-
-                          return GestureDetector(
-                            onTap: isMonthlyAuto ? null : () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => UpdateTransactionPage(
-                                    token: widget.token,
-                                    idnguodung: widget.idnguodung,
-                                    transactionData: t,
-                                  ),
-                                ),
                               );
-                              if (result == true) {
-                                _loadData();
-                              }
-                            },
-                            child: Opacity(
-                              opacity: isMonthlyAuto ? 0.6 : 1.0,
-                              child: _TransactionItem(
-                                icon: getFaIconDataFromUnicode(iconCode),
-                                iconColor: hexToColor(colorCode),
-                                title: categoryName,
-                                subtitle: t['ghi_chu'] ?? '',
-                                amount: amountText,
-                                amountColor: amountColor,
-                                transactionData: t,
+                            })
+                          ]
+                        else
+                          ...[
+                            const Center(
+                              child: Text(
+                                'Cài đặt ngân sách',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                               ),
                             ),
+                            const SizedBox(height: 8),
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF64B5F6),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ),
+                          ],
+                      ],
+                    ),
+                  ),
+                  // Nút export
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    child: ElevatedButton.icon(
+                      icon: Icon(Icons.file_upload),
+                      label: Text('Export chi tiêu mẫu'),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: Size(double.infinity, 44),
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        textStyle: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () => showExportDialog(
+                        context,
+                        idNguoiDung: int.tryParse(widget.idnguodung.toString()),
+                        token: widget.token,
+                        thang: _selectedDate.month,
+                      ),
+                    ),
+                  ),
+                  // Danh sách giao dịch
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ListView(
+                      shrinkWrap: true,
+                      physics: NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      children: [
+                        ..._groupedTransactions.keys.map((date) {
+                          final dailyIncome = _dailyTotals[date]!['income']!;
+                          final dailyExpense = _dailyTotals[date]!['expense']!;
+                          return Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(date, style: const TextStyle(fontSize: 14, color: Colors.black54)),
+                                    ),
+                                    const Spacer(),
+                                    Expanded(
+                                      child: Text('Chi tiêu:${formatter.format(dailyExpense)}', style: const TextStyle(fontSize: 14, color: Colors.black54)),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text('Thu nhập:+${formatter.format(dailyIncome)}', style: const TextStyle(fontSize: 14, color: Colors.blue)),
+                                  ],
+                                ),
+                              ),
+                              ..._groupedTransactions[date]!.map((t) {
+                                final category = _allCategories.firstWhere(
+                                  (cat) {
+                                    final int? categoryId = int.tryParse(cat['id_danhmuc']?.toString() ?? '');
+                                    final int? transactionCategoryId = int.tryParse(t['id_danhmuc']?.toString() ?? '');
+                                    return categoryId == transactionCategoryId;
+                                  },
+                                  orElse: () => {},
+                                );
+                                final iconCode = category?['ma_icon'] ?? 'f555';
+                                final colorCode = category?['ma_mau'] ?? '#2196F3';
+                                final categoryName = category?['ten_danh_muc'] ?? 'Không rõ';
+                                double amountValue = (t['so_tien'] as num?)?.toDouble() ?? 0.0;
+                                final amountText = ((t['id_loai'].toString() == '1') ? '+' : '-') + formatter.format(amountValue);
+                                final amountColor = (t['id_loai'].toString() == '1') ? Colors.blue : Colors.black;
+                                final isMonthlyAuto = t['id_danhmuc'].toString() == '55' && t['ghi_chu'] == 'Tự động trừ chi tiêu hàng tháng';
+                                return GestureDetector(
+                                  onTap: isMonthlyAuto ? null : () async {
+                                    final result = await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => UpdateTransactionPage(
+                                          token: widget.token,
+                                          idnguodung: widget.idnguodung,
+                                          transactionData: t,
+                                        ),
+                                      ),
+                                    );
+                                    print('[DEBUG] Kết quả cập nhật giao dịch: $result');
+                                    if (result == true) {
+                                      print('[DEBUG] Gọi _loadData() sau khi cập nhật');
+                                      _loadData();
+                                    }
+                                  },
+                                  child: Opacity(
+                                    opacity: isMonthlyAuto ? 0.6 : 1.0,
+                                    child: _TransactionItem(
+                                      icon: getFaIconDataFromUnicode(iconCode),
+                                      iconColor: hexToColor(colorCode),
+                                      title: categoryName,
+                                      subtitle: t['ghi_chu'] ?? '',
+                                      amount: amountText,
+                                      amountColor: amountColor,
+                                      transactionData: t,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              const Divider(height: 1),
+                            ],
                           );
                         }).toList(),
-                        const Divider(height: 1),
                       ],
-                    );
-                  }).toList(),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -867,9 +870,16 @@ class _HomePageState extends State<HomePage> {
         idnguoidung: widget.idnguodung,
         onBack: () => _pageController.jumpToPage(0),
       ),
+      SampleExpenseListPage(
+        key: _sampleExpenseListPageKey,
+        token: widget.token,
+        idnguoidung: widget.idnguodung,
+        onBack: ()=> _pageController.jumpToPage(0),
+      ), 
     ];
 
 
+    //menu dưới cùng
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       body: isLoading
@@ -880,6 +890,11 @@ class _HomePageState extends State<HomePage> {
           setState(() {
             _selectedIndex = index;
           });
+          // Khi chuyển đến trang Chi tiêu mẫu, tải lại dữ liệu
+          if (index == 3) {
+            print("[DEBUG_HOME] Chuyển đến trang chi tiêu mẫu, gọi reloadData()...");
+            _sampleExpenseListPageKey.currentState?.reloadData();
+          }
         },
         children: _pages,
       ),
@@ -925,6 +940,16 @@ class _HomePageState extends State<HomePage> {
                     _selectedIndex = 2;
                   });
                   _pageController.jumpToPage(2);//điểu khiển trang nhảy sang số 2
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.list),
+                color: _selectedIndex == 3 ? Colors.blue : Colors.grey,
+                onPressed: () {
+                  setState(() {
+                    _selectedIndex = 3;
+                  });
+                  _pageController.jumpToPage(3);
                 },
               ),
               const Spacer(), // Đẩy khoảng trống và nút về bên phải
